@@ -21,7 +21,8 @@ func main() {
 		Level: slog.LevelDebug,
 	}))
 	appEnv := appEnv.New(appEnvLogger)
-	debug := appEnv.GetBoolOrDefault("DEBUG_MODE", false)
+	debugMode := appEnv.GetBoolOrDefault("DEBUG_MODE", false)
+	desktopMode := appEnv.GetBoolOrDefault("DESKTOP_MODE", false)
 
 	// Create global logger
 	loggerLevel := appEnv.GetIntOrDefault("LOGGER_LEVEL", 4)
@@ -42,7 +43,7 @@ func main() {
 	// Create repository
 	// TODO: save to the real DB
 	var repo repository.WallRepository
-	if debug {
+	if debugMode || desktopMode {
 		repo = disk.New(ctx, logger, appEnv, wallID)
 	} else {
 		// TODO
@@ -70,7 +71,7 @@ func main() {
 	}
 
 	// Save posts to repository
-	if debug {
+	if debugMode {
 		postID, err := repo.SavePost((*wallPosts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
