@@ -1,1 +1,4 @@
 .env
+
+# debug disk repository path by default
+diskRepo/

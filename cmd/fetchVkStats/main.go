@@ -1,28 +1,88 @@
 package main
 
 import (
-	"log"
+	"bufio"
+	"context"
+	"fmt"
+	"log/slog"
 	"os"
 
+	"arrai/config/appEnv"
 	"arrai/internal/provider/vk"
-
-	"github.com/joho/godotenv"
+	"arrai/internal/repository"
+	"arrai/internal/repository/disk"
 )
 
-func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Panicf("Error loading .env file: %v", err.Error())
-	}
-}
-
 func main() {
-	accessToken, exists := os.LookupEnv("VK_ACCESS_TOKEN")
+	ctx := context.Background()
 
-	if !exists {
-		log.Println("VK_ACCESS_TOKEN is not set")
+	// Create appEnv
+	appEnvLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
+	appEnv := appEnv.New(appEnvLogger)
+	debug := appEnv.GetBoolOrDefault("DEBUG_MODE", false)
+
+	// Create global logger
+	loggerLevel := appEnv.GetIntOrDefault("LOGGER_LEVEL", 4)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.Level(loggerLevel),
+	}))
+
+	// Create VK client
+	accessToken := appEnv.MustGet("VK_ACCESS_TOKEN")
+	client := vk.NewClient(ctx, logger, appEnv, accessToken)
+
+	// Read wall ID from user
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Print("Enter wall ID: ")
+	scanner.Scan()
+	wallID := scanner.Text()
+
+	// Create repository
+	// TODO: save to the real DB
+	var repo repository.WallRepository
+	if debug {
+		repo = disk.New(ctx, logger, appEnv, wallID)
+	} else {
+		// TODO
+	}
+	if repo == nil {
+		logger.Error("failed to create repository",
+			"error", "repository is nil",
+		)
 		return
 	}
 
-	client := vk.NewClient(accessToken)
-	log.Printf(client.GetWall("wall-1"))
+	// Get wall using API
+	wallPosts, err := client.GetWall(wallID)
+	if err != nil {
+		logger.Error("failed to get wall",
+			"error", err,
+		)
+		return
+	} else {
+		logger.Debug("Wall fetched",
+			"wall_id", wallID,
+			"posts_count", len(*wallPosts),
+			"first_post_text", (*wallPosts)[0].Text,
+		)
+	}
+
+	// Save posts to repository
+	if debug {
+		postID, err := repo.SavePost((*wallPosts)[0])
+		if err != nil {
+			logger.Error("failed to save posts to repository",
+				"error", err,
+			)
+			return
+		}
+
+		logger.Debug("First post saved to repository",
+			"post_id", postID,
+		)
+	} else {
+		repo.SavePosts(*wallPosts)
+	}
 }
