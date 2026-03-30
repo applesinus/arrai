@@ -97,7 +97,16 @@ func (c *Client) SavePost(post domain.Post) (int, error) {
 
 // TODO
 func (c *Client) SavePosts(posts []domain.Post) (map[int]int, error) {
-	return nil, nil
+	postIDs := make(map[int]int, len(posts))
+	for _, post := range posts {
+		id, err := c.SavePost(post)
+		if err != nil {
+			return nil, err
+		}
+		postIDs[id] = post.ID
+	}
+
+	return postIDs, nil
 }
 
 // TODO
