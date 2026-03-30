@@ -108,7 +108,11 @@ func (c *Client) GetWall(wallID string) (*[]domain.Post, error) {
 	posts := make([]Post, 0)
 
 	for offset := 0; ; offset += 100 {
-		resp, err := c.doVkApiRequest(METHOD_GET_WALL, map[string]any{"domain": wallID})
+		resp, err := c.doVkApiRequest(METHOD_GET_WALL, map[string]any{
+			"domain": wallID,
+			"count":  100,
+			"offset": offset,
+		})
 		if err != nil {
 			return nil, err
 		}
