@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"arrai/config/appEnv"
+	"arrai/internal/provider"
 	"arrai/internal/provider/vk"
 	"arrai/internal/repository"
 	"arrai/internal/repository/disk"
@@ -30,12 +31,17 @@ func main() {
 		Level: slog.Level(loggerLevel),
 	}))
 
+	// Read provider type from user
+	scanner := bufio.NewScanner(os.Stdin)
+	fmt.Printf("Avaliable providers: %v\nDefault is %s\nEnter provider type: ", provider.ProviderTypes, provider.ProviderTypes[0])
+	scanner.Scan()
+	providerType := scanner.Text()
+
 	// Create VK client
 	accessToken := appEnv.MustGet("VK_ACCESS_TOKEN")
 	client := vk.NewClient(ctx, logger, appEnv, accessToken)
 
 	// Read author ID from user
-	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("Enter author ID: ")
 	scanner.Scan()
 	authorID := scanner.Text()
@@ -72,7 +78,7 @@ func main() {
 
 	// Save posts to repository
 	if debugMode {
-		postID, err := repo.SavePost((*posts)[0])
+		postID, err := repo.SavePost(providerType, authorID, (*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -84,6 +90,6 @@ func main() {
 			"post_id", postID,
 		)
 	} else {
-		repo.SavePosts(*posts)
+		repo.SavePosts(providerType, authorID, *posts)
 	}
 }
