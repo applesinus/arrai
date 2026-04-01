@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"sync"
 
 	"arrai/config/appEnv"
@@ -20,7 +21,6 @@ type Client struct {
 	appEnv *appEnv.AppEnv
 	logger *slog.Logger
 
-	wallID   string
 	basePath string
 }
 
@@ -33,7 +33,6 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, wallID
 		appEnv: appEnv,
 		logger: logger,
 
-		wallID:   wallID,
 		basePath: basePath,
 	}
 
@@ -65,11 +64,15 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, wallID
 	return repository.WallRepository(diskRepo)
 }
 
-func (c *Client) SavePost(post domain.Post) (int, error) {
+func (c *Client) openFolder(path string) error {
+	return exec.Command("explorer", path).Start()
+}
+
+func (c *Client) SavePost(serviceName, authorID string, post domain.Post) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	filePath := c.filePath(post.ID)
+	filePath := c.filePath(serviceName, authorID, post.ID)
 
 	_, err := os.Stat(filePath)
 	if !os.IsNotExist(err) {
@@ -95,11 +98,10 @@ func (c *Client) SavePost(post domain.Post) (int, error) {
 	return post.ID, nil
 }
 
-// TODO
-func (c *Client) SavePosts(posts []domain.Post) (map[int]int, error) {
+func (c *Client) SavePosts(serviceName, authorID string, posts []domain.Post) (map[int]int, error) {
 	postIDs := make(map[int]int, len(posts))
 	for _, post := range posts {
-		id, err := c.SavePost(post)
+		id, err := c.SavePost(serviceName, authorID, post)
 		if err != nil {
 			return nil, err
 		}
@@ -110,40 +112,40 @@ func (c *Client) SavePosts(posts []domain.Post) (map[int]int, error) {
 }
 
 // TODO
-func (c *Client) GetPost(postID int) (domain.Post, error) {
+func (c *Client) GetPost(serviceName, authorID string, postID int) (domain.Post, error) {
 	return domain.Post{}, nil
 }
 
 // TODO
-func (c *Client) GetPosts(postIDs []int) ([]domain.Post, error) {
+func (c *Client) GetPosts(serviceName, authorID string, postIDs []int) ([]domain.Post, error) {
 	return nil, nil
 }
 
 // TODO
-func (c *Client) GetAllPosts() ([]domain.Post, error) {
+func (c *Client) GetAllPosts(serviceName, authorID string) ([]domain.Post, error) {
 	return nil, nil
 }
 
 // TODO
-func (c *Client) GetExistingPostIDs() ([]int, error) {
+func (c *Client) GetExistingPostIDs(serviceName, authorID string) ([]int, error) {
 	return nil, nil
 }
 
 // TODO
-func (c *Client) UpdatePost(post domain.Post) error {
+func (c *Client) UpdatePost(serviceName, authorID string, post domain.Post) error {
 	return nil
 }
 
 // TODO
-func (c *Client) UpdatePosts(posts []domain.Post) error {
+func (c *Client) UpdatePosts(serviceName, authorID string, posts []domain.Post) error {
 	return nil
 }
 
 // TODO
-func (c *Client) DeletePost(postID int) error {
+func (c *Client) DeletePost(serviceName, authorID string, postID int) error {
 	return nil
 }
 
-func (c *Client) filePath(postID int) string {
-	return fmt.Sprintf("%s/%s/%d.json", c.basePath, c.wallID, postID)
+func (c *Client) filePath(serviceName, authorID string, postID int) string {
+	return fmt.Sprintf("%s/%s/%s/%d.json", c.basePath, serviceName, authorID, postID)
 }

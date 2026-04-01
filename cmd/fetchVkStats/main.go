@@ -34,17 +34,17 @@ func main() {
 	accessToken := appEnv.MustGet("VK_ACCESS_TOKEN")
 	client := vk.NewClient(ctx, logger, appEnv, accessToken)
 
-	// Read wall ID from user
+	// Read author ID from user
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Print("Enter wall ID: ")
+	fmt.Print("Enter author ID: ")
 	scanner.Scan()
-	wallID := scanner.Text()
+	authorID := scanner.Text()
 
 	// Create repository
 	// TODO: save to the real DB
 	var repo repository.WallRepository
 	if debugMode || desktopMode {
-		repo = disk.New(ctx, logger, appEnv, wallID)
+		repo = disk.New(ctx, logger, appEnv, authorID)
 	} else {
 		// TODO
 	}
@@ -55,16 +55,16 @@ func main() {
 		return
 	}
 
-	// Get wall using API
-	posts, err := client.GetPosts(wallID)
+	// Get posts using API
+	posts, err := client.GetPosts(authorID)
 	if err != nil {
-		logger.Error("failed to get wall",
+		logger.Error("failed to get posts",
 			"error", err,
 		)
 		return
 	} else {
 		logger.Debug("Wall fetched",
-			"wall_id", wallID,
+			"author_id", authorID,
 			"posts_count", len(*posts),
 			"first_post_text", (*posts)[0].Text,
 		)
