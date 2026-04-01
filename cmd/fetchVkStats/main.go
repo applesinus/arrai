@@ -65,14 +65,14 @@ func main() {
 	} else {
 		logger.Debug("Wall fetched",
 			"wall_id", wallID,
-			"posts_count", len(*wallPosts),
-			"first_post_text", (*wallPosts)[0].Text,
+			"posts_count", len(*posts),
+			"first_post_text", (*posts)[0].Text,
 		)
 	}
 
 	// Save posts to repository
 	if debugMode {
-		postID, err := repo.SavePost((*wallPosts)[0])
+		postID, err := repo.SavePost((*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -84,6 +84,6 @@ func main() {
 			"post_id", postID,
 		)
 	} else {
-		repo.SavePosts(*wallPosts)
+		repo.SavePosts(*posts)
 	}
 }
