@@ -56,6 +56,7 @@ func main() {
 		repo = disk.New(ctx, logger, appEnv, authorID)
 	} else {
 		// TODO
+		logger.Error("Real DB is not implemented")
 	}
 	if repo == nil {
 		logger.Error("failed to create repository",
