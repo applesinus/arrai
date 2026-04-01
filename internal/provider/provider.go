@@ -3,7 +3,9 @@ package provider
 import "arrai/internal/domain"
 
 var (
-	ProviderTypes = []string{"vk"}
+	ProviderTypes = map[string]struct{}{
+		"vk": {},
+	}
 )
 
 type Provider interface {

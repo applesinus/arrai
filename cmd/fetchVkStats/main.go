@@ -33,9 +33,12 @@ func main() {
 
 	// Read provider type from user
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Printf("Avaliable providers: %v\nDefault is %s\nEnter provider type: ", provider.ProviderTypes, provider.ProviderTypes[0])
+	fmt.Printf("Avaliable providers: %v\nDefault is 'vk'\nEnter provider type: ", provider.ProviderTypes)
 	scanner.Scan()
 	providerType := scanner.Text()
+	if _, ok := provider.ProviderTypes[providerType]; !ok {
+		providerType = "vk"
+	}
 
 	// Create VK client
 	accessToken := appEnv.MustGet("VK_ACCESS_TOKEN")
