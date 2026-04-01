@@ -82,8 +82,8 @@ func (c *Client) doVkApiRequest(method string, params map[string]any) ([]byte, e
 	return body, nil
 }
 
-func (c *Client) getWallOwnerIntID(wallID string) (int, error) {
-	resp, err := c.doVkApiRequest(METHOD_RESOLVE_NAME, map[string]any{"screen_name": wallID})
+func (c *Client) getAuthorIntID(authorID string) (int, error) {
+	resp, err := c.doVkApiRequest(METHOD_RESOLVE_NAME, map[string]any{"screen_name": authorID})
 	if err != nil {
 		return 0, err
 	}
@@ -94,18 +94,18 @@ func (c *Client) getWallOwnerIntID(wallID string) (int, error) {
 		return 0, err
 	}
 	if response.Response.ID == 0 {
-		return 0, fmt.Errorf("failed to resolve wall owner ID: %s", wallID)
+		return 0, fmt.Errorf("failed to resolve author ID: %s", authorID)
 	}
 
 	return response.Response.ID, nil
 }
 
 func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
-	wallOwnerId, err := c.getWallOwnerIntID(authorID)
+	authorId, err := c.getAuthorIntID(authorID)
 	if err != nil {
 		return nil, err
 	}
-	wallOwnerId *= -1
+	authorId *= -1
 
 	// Getting all posts
 	posts := make([]domain.Post, 0)
@@ -149,7 +149,7 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 
 	// Getting comments for all posts
 	for i, post := range posts {
-		comments, err := c.getComments(wallOwnerId, post.ID)
+		comments, err := c.getComments(authorId, post.ID)
 		if err != nil {
 			c.logger.Error("failed to get comments for post",
 				"post_id", post.ID,
@@ -167,12 +167,12 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 	return &posts, nil
 }
 
-func (c *Client) getComments(wallOwnerID, postID int) (*[]domain.Comment, error) {
+func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 	comments := make([]domain.Comment, 0)
 
 	for offset := 0; ; offset += 10 {
 		resp, err := c.doVkApiRequest(METHOD_GET_COMMENTS, map[string]any{
-			"owner_id":   wallOwnerID,
+			"owner_id":   authorID,
 			"post_id":    postID,
 			"need_likes": 1,
 
@@ -199,7 +199,7 @@ func (c *Client) getComments(wallOwnerID, postID int) (*[]domain.Comment, error)
 	}
 
 	for _, comment := range comments {
-		err := c.fillReplies(wallOwnerID, postID, &comment)
+		err := c.fillReplies(authorID, postID, &comment)
 		if err != nil {
 			c.logger.Error("failed to fill replies", "error", err)
 			return nil, err
@@ -210,10 +210,10 @@ func (c *Client) getComments(wallOwnerID, postID int) (*[]domain.Comment, error)
 }
 
 // fillReplies implements DFS
-func (c *Client) fillReplies(wallOwnerID, postID int, comment *domain.Comment) error {
+func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) error {
 	for offset := 0; ; offset += 10 {
 		resp, err := c.doVkApiRequest(METHOD_GET_COMMENTS, map[string]any{
-			"owner_id":   wallOwnerID,
+			"owner_id":   authorID,
 			"post_id":    postID,
 			"comment_id": comment.ID,
 			"need_likes": 1,
@@ -246,7 +246,7 @@ func (c *Client) fillReplies(wallOwnerID, postID int, comment *domain.Comment) e
 				"Text", newReply.Text,
 			)
 
-			err = c.fillReplies(wallOwnerID, postID, &newReply)
+			err = c.fillReplies(authorID, postID, &newReply)
 			if err != nil {
 				return err
 			}

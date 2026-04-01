@@ -51,11 +51,11 @@ func main() {
 
 	// Create repository
 	// TODO: save to the real DB
-	var repo repository.WallRepository
+	var repo repository.Repository
 	if debugMode || desktopMode {
-		repo = disk.New(ctx, logger, appEnv, authorID)
+		repo = disk.New(ctx, logger, appEnv, providerType, authorID)
 	} else {
-		// TODO
+		// TODO DB
 		logger.Error("Real DB is not implemented")
 	}
 	if repo == nil {
@@ -73,7 +73,7 @@ func main() {
 		)
 		return
 	} else {
-		logger.Debug("Wall fetched",
+		logger.Debug("Author's posts fetched",
 			"author_id", authorID,
 			"posts_count", len(*posts),
 			"first_post_text", (*posts)[0].Text,
@@ -93,6 +93,23 @@ func main() {
 		logger.Debug("First post saved to repository",
 			"post_id", postID,
 		)
+
+		postIDs, err := repo.GetExistingPostIDs(providerType, authorID)
+		if err != nil {
+			logger.Error("failed to get existing post IDs from repository",
+				"error", err,
+			)
+			return
+		}
+
+		logger.Debug("Existing post IDs fetched from repository",
+			"post_ids", postIDs,
+		)
+
+		fmt.Print("Enter to clear debug repo: ")
+		scanner.Scan()
+
+		repo.Clear(providerType, authorID)
 	} else {
 		repo.SavePosts(providerType, authorID, *posts)
 	}

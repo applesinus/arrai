@@ -2,7 +2,7 @@ package repository
 
 import "arrai/internal/domain"
 
-type WallRepository interface {
+type Repository interface {
 	SavePost(serviceName, authorID string, post domain.Post) (int, error)
 	SavePosts(serviceName, authorID string, posts []domain.Post) (map[int]int, error)
 
@@ -15,4 +15,5 @@ type WallRepository interface {
 	UpdatePosts(serviceName, authorID string, posts []domain.Post) error
 
 	DeletePost(serviceName, authorID string, postID int) error
+	Clear(serviceName, authorID string) error
 }
