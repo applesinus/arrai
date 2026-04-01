@@ -3,11 +3,15 @@ package vk
 import (
 	"arrai/internal/domain"
 	"fmt"
+	"time"
 )
 
 type vkWallPost struct {
 	// OwnerID
 	OwnerID int `json:"owner_id"`
+
+	// CreatedAt
+	CreatedAt int `json:"date"`
 
 	// Views
 	Views struct {
@@ -47,6 +51,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 	post := domain.Post{
 		ID:        p.ID,
 		OwnerID:   p.OwnerID,
+		CreatedAt: creationTime,
 		Views:     p.Views.Count,
 		Reactions: p.Reactions.Count,
 		Reposts:   p.Reposts.Count,
@@ -61,6 +66,9 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 type vkComment struct {
 	// Base
 	ID int `json:"id"`
+
+	// CreatedAt
+	CreatedAt int `json:"date"`
 
 	// Text
 	User     int  `json:"from_id"`
@@ -89,6 +97,7 @@ func (c vkComment) toDomain() domain.Comment {
 
 	return domain.Comment{
 		ID:        c.ID,
+		CreatedAt: creationTime,
 
 		User:      fmt.Sprintf("%d", c.User),
 		IsAuthor:  c.IsAuthor,
