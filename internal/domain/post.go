@@ -2,6 +2,7 @@ package domain
 
 type Post struct {
 	ID        int       `json:"id"`
+	OwnerID   int       `json:"ownerId"`
 	Views     int       `json:"views"`
 	Reactions int       `json:"reactions"`
 	Reposts   int       `json:"reposts"`

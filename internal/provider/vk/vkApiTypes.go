@@ -6,6 +6,9 @@ import (
 )
 
 type vkWallPost struct {
+	// OwnerID
+	OwnerID int `json:"owner_id"`
+
 	// Views
 	Views struct {
 		Count int `json:"count"`
@@ -43,6 +46,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 
 	post := domain.Post{
 		ID:        p.ID,
+		OwnerID:   p.OwnerID,
 		Views:     p.Views.Count,
 		Reactions: p.Reactions.Count,
 		Reposts:   p.Reposts.Count,
