@@ -198,8 +198,8 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 		}
 	}
 
-	for _, comment := range comments {
-		err := c.fillReplies(authorID, postID, &comment)
+	for i := range comments {
+		err := c.fillReplies(authorID, postID, &comments[i])
 		if err != nil {
 			c.logger.Error("failed to fill replies", "error", err)
 			return nil, err
