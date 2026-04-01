@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// Get wall using API
-	wallPosts, err := client.GetWall(wallID)
+	posts, err := client.GetPosts(wallID)
 	if err != nil {
 		logger.Error("failed to get wall",
 			"error", err,

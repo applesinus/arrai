@@ -13,6 +13,7 @@ import (
 
 	"arrai/config/appEnv"
 	"arrai/internal/domain"
+	"arrai/internal/provider"
 )
 
 type Client struct {
@@ -27,8 +28,8 @@ type Client struct {
 	debugMode bool
 }
 
-func NewClient(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, accessToken string) *Client {
-	return &Client{
+func NewClient(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, accessToken string) provider.Provider {
+	client := &Client{
 		ctx:    ctx,
 		logger: logger,
 		env:    appEnv,
@@ -39,6 +40,8 @@ func NewClient(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, 
 
 		debugMode: appEnv.GetBoolOrDefault("DEBUG_MODE", false),
 	}
+
+	return provider.Provider(client)
 }
 
 func (c *Client) createLink(method string, params map[string]any) string {
@@ -97,8 +100,8 @@ func (c *Client) getWallOwnerIntID(wallID string) (int, error) {
 	return response.Response.ID, nil
 }
 
-func (c *Client) GetWall(wallID string) (*[]domain.Post, error) {
-	wallOwnerId, err := c.getWallOwnerIntID(wallID)
+func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
+	wallOwnerId, err := c.getWallOwnerIntID(authorID)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +112,7 @@ func (c *Client) GetWall(wallID string) (*[]domain.Post, error) {
 
 	for offset := 0; ; offset += 100 {
 		resp, err := c.doVkApiRequest(METHOD_GET_WALL, map[string]any{
-			"domain": wallID,
+			"domain": authorID,
 			"count":  100,
 			"offset": offset,
 		})
