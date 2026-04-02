@@ -6,6 +6,18 @@ import (
 	"time"
 )
 
+type Attachment struct {
+	Type  string `json:"type"`
+	Photo struct {
+		Sizes []struct {
+			Url string `json:"url"`
+		}
+		OrigPhoto struct {
+			Url string `json:"url"`
+		} `json:"orig_photo"`
+	} `json:"photo"`
+}
+
 type vkWallPost struct {
 	// OwnerID
 	OwnerID int `json:"owner_id"`
@@ -32,17 +44,7 @@ type vkWallPost struct {
 	Text string `json:"text"`
 
 	// Photos
-	Attachments []struct {
-		Type  string `json:"type"`
-		Photo struct {
-			Sizes []struct {
-				Url string `json:"url"`
-			}
-			OrigPhoto struct {
-				Url string `json:"url"`
-			} `json:"orig_photo"`
-		} `json:"photo"`
-	} `json:"attachments"`
+	Attachments []Attachment `json:"attachments"`
 
 	// ID is for comments
 	ID int `json:"id"`
@@ -107,21 +109,39 @@ type vkComment struct {
 		Count int `json:"count"`
 	} `json:"likes"`
 
-	Attachments []struct {
-		Type  string `json:"type"`
-		Photo struct {
-			OrigPhoto struct {
-				Url string `json:"url"`
-			} `json:"orig_photo"`
-		} `json:"photo"`
-	} `json:"attachments"`
-	Thread struct {
+	Attachments []Attachment `json:"attachments"`
+	Thread      struct {
 		Count int `json:"count"`
 	} `json:"thread"`
 }
 
 func (c vkComment) toDomain() domain.Comment {
 	creationTime := time.Unix(int64(c.CreatedAt), 0)
+
+	photos := make([]domain.TwoSizesPhoto, 0)
+	for _, attachment := range c.Attachments {
+		if attachment.Type == ATTACHMENT_PHOTO {
+			smallSizeUrl := ""
+
+			switch len(attachment.Photo.Sizes) {
+			case 0:
+				smallSizeUrl = attachment.Photo.OrigPhoto.Url
+			case 1:
+				smallSizeUrl = attachment.Photo.Sizes[0].Url
+			default:
+				smallSizeUrl = attachment.Photo.Sizes[1].Url
+			}
+
+			photos = append(photos, domain.TwoSizesPhoto{
+				BigSize: domain.Photo{
+					Url: attachment.Photo.OrigPhoto.Url,
+				},
+				SmallSize: domain.Photo{
+					Url: smallSizeUrl,
+				},
+			})
+		}
+	}
 
 	return domain.Comment{
 		ID:        c.ID,
@@ -131,9 +151,8 @@ func (c vkComment) toDomain() domain.Comment {
 		IsAuthor:  c.IsAuthor,
 		Reactions: c.Likes.Count,
 
-		Text: c.Text,
-		// TODO: Photos
-		//Photos: c.Attachments,
+		Text:    c.Text,
+		Photos:  photos,
 		Replies: nil,
 	}
 }

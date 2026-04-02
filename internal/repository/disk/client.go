@@ -85,8 +85,9 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 		return -1, repository.ERR_POST_EXISTS
 	}
 
+	photoDirPath := fmt.Sprintf("%s/%d", dirPath, post.ID)
+
 	if len(post.Photos) > 0 {
-		photoDirPath := fmt.Sprintf("%s/%d", dirPath, post.ID)
 		if !c.isPathExists(photoDirPath) {
 			err := os.MkdirAll(photoDirPath, 0755)
 			if err != nil {
@@ -108,6 +109,11 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 		}
 	}
 
+	err := c.saveCommentsPhotos(photoDirPath, &post.Comments)
+	if err != nil {
+		return -1, err
+	}
+
 	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return -1, err
@@ -125,6 +131,39 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 	}
 
 	return post.ID, nil
+}
+
+func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) error {
+	for i, comment := range *comments {
+		if len(comment.Photos) > 0 {
+			if !c.isPathExists(fmt.Sprintf("%s/%d", dirPath, comment.ID)) {
+				err := os.MkdirAll(fmt.Sprintf("%s/%d", dirPath, comment.ID), 0755)
+				if err != nil {
+					return err
+				}
+			}
+
+			for j, photo := range comment.Photos {
+				photoFilenames, err := c.savePhoto(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("%d.jpg", j), photo)
+				if err != nil {
+					return err
+				}
+
+				comment.Photos[j].BigSize.Filename = photoFilenames[0]
+				comment.Photos[j].BigSize.Content = []byte{}
+
+				comment.Photos[j].SmallSize.Filename = photoFilenames[1]
+				comment.Photos[j].SmallSize.Content = []byte{}
+			}
+		}
+
+		err := c.saveCommentsPhotos(dirPath, &(*comments)[i].Replies)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Client) savePhoto(dirPath, filename string, photo domain.TwoSizesPhoto) ([]string, error) {

@@ -115,7 +115,8 @@ func main() {
 			return
 		}
 		logger.Debug("First post fetched from repository",
-			"post", post,
+			"post_id", post.ID,
+			"post_text", post.Text,
 		)
 
 		fmt.Print("Enter to clear debug repo: ")

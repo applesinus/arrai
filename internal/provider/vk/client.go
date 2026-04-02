@@ -158,7 +158,7 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 		}
 		posts[i].Comments = *comments
 
-		err = c.fillPhotos(&posts[i])
+		err = c.fillPhotos(&posts[i].Photos)
 		if err != nil {
 			c.logger.Error("failed to get photos for post",
 				"post_id", posts[i].ID,
@@ -174,45 +174,32 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 	return &posts, nil
 }
 
-func (c *Client) fillPhotos(post *domain.Post) error {
-	c.logger.Debug("Filling photos",
-		"post_id", post.ID,
-		"photos_count", len(post.Photos),
-		"photos", post.Photos,
-	)
-
-	for i := range post.Photos {
-		c.logger.Debug("Filling photos",
-			"post_id", post.ID,
-			"photo_big", post.Photos[i].BigSize.Url,
-			"photo_small", post.Photos[i].SmallSize.Url,
-		)
-
-		bigSize, err := c.downloadPhoto(post.Photos[i].BigSize.Url)
+func (c *Client) fillPhotos(photos *[]domain.TwoSizesPhoto) error {
+	for i := range *photos {
+		bigSize, err := c.downloadPhoto((*photos)[i].BigSize.Url)
 		if err != nil {
 			return err
 		}
 
 		smallSize := bigSize
-		smallSizeUrl := post.Photos[i].SmallSize.Url
+		smallSizeUrl := (*photos)[i].SmallSize.Url
 
-		if smallSizeUrl != post.Photos[i].BigSize.Url {
+		if smallSizeUrl != (*photos)[i].BigSize.Url {
 			smallSize, err = c.downloadPhoto(smallSizeUrl)
 			if err != nil {
 				c.logger.Error("Cannot download small size photo, using big size copy instead",
-					"post_id", post.ID,
 					"error", err,
 					"photo_url", smallSizeUrl,
 				)
 
 				smallSize = bigSize
-				smallSizeUrl = post.Photos[i].BigSize.Url
+				smallSizeUrl = (*photos)[i].BigSize.Url
 			}
 		}
 
-		post.Photos[i].BigSize.Content = bigSize
-		post.Photos[i].SmallSize.Content = smallSize
-		post.Photos[i].SmallSize.Url = smallSizeUrl
+		(*photos)[i].BigSize.Content = bigSize
+		(*photos)[i].SmallSize.Content = smallSize
+		(*photos)[i].SmallSize.Url = smallSizeUrl
 	}
 
 	return nil
@@ -258,6 +245,16 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 		for _, comment := range response.Response.Items {
 			newComment := comment.toDomain()
 			comments = append(comments, newComment)
+
+			if len(comments[len(comments)-1].Photos) > 0 {
+				err = c.fillPhotos(&comments[len(comments)-1].Photos)
+				if err != nil {
+					c.logger.Error("failed to get photos for comment",
+						"comment_id", comments[len(comments)-1].ID,
+						"error", err,
+					)
+				}
+			}
 		}
 	}
 
@@ -304,6 +301,16 @@ func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) erro
 		for _, reply := range response.Response.Items {
 			newReply := reply.toDomain()
 			comment.Replies = append(comment.Replies, newReply)
+
+			if len(comment.Replies[len(comment.Replies)-1].Photos) > 0 {
+				err = c.fillPhotos(&comment.Replies[len(comment.Replies)-1].Photos)
+				if err != nil {
+					c.logger.Error("failed to get photos for comment",
+						"comment_id", comment.Replies[len(comment.Replies)-1].ID,
+						"error", err,
+					)
+				}
+			}
 
 			c.logger.Debug("New comment",
 				"Text", newReply.Text,
