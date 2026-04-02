@@ -44,7 +44,7 @@ func NewClient(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, 
 	return provider.Provider(client)
 }
 
-func (c *Client) createLink(method string, params map[string]any) string {
+func (c *Client) createVkApiLink(method string, params map[string]any) string {
 	paramsBuilder := strings.Builder{}
 	for key, value := range params {
 		paramsBuilder.WriteString(fmt.Sprintf("&%s=%v", key, value))
@@ -64,7 +64,7 @@ func (c *Client) doVkApiRequest(method string, params map[string]any) ([]byte, e
 		return nil, err
 	}
 
-	resp, err := c.httpClient.Get(c.createLink(method, params))
+	resp, err := c.httpClient.Get(c.createVkApiLink(method, params))
 	if err != nil {
 		return nil, err
 	}
@@ -147,17 +147,24 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 		}
 	}
 
-	// Getting comments for all posts
-	for i, post := range posts {
-		comments, err := c.getComments(authorId, post.ID)
+	// Getting comments and photos for all posts
+	for i := range posts {
+		comments, err := c.getComments(authorId, posts[i].ID)
 		if err != nil {
 			c.logger.Error("failed to get comments for post",
-				"post_id", post.ID,
+				"post_id", posts[i].ID,
 				"error", err,
 			)
 		}
-
 		posts[i].Comments = *comments
+
+		err = c.fillPhotos(&posts[i])
+		if err != nil {
+			c.logger.Error("failed to get photos for post",
+				"post_id", posts[i].ID,
+				"error", err,
+			)
+		}
 
 		if c.debugMode {
 			break
@@ -165,6 +172,62 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 	}
 
 	return &posts, nil
+}
+
+func (c *Client) fillPhotos(post *domain.Post) error {
+	c.logger.Debug("Filling photos",
+		"post_id", post.ID,
+		"photos_count", len(post.Photos),
+		"photos", post.Photos,
+	)
+
+	for i := range post.Photos {
+		c.logger.Debug("Filling photos",
+			"post_id", post.ID,
+			"photo_big", post.Photos[i].BigSize.Url,
+			"photo_small", post.Photos[i].SmallSize.Url,
+		)
+
+		bigSize, err := c.downloadPhoto(post.Photos[i].BigSize.Url)
+		if err != nil {
+			return err
+		}
+
+		smallSize := bigSize
+		smallSizeUrl := post.Photos[i].SmallSize.Url
+
+		if smallSizeUrl != post.Photos[i].BigSize.Url {
+			smallSize, err = c.downloadPhoto(smallSizeUrl)
+			if err != nil {
+				c.logger.Error("Cannot download small size photo, using big size copy instead",
+					"post_id", post.ID,
+					"error", err,
+					"photo_url", smallSizeUrl,
+				)
+
+				smallSize = bigSize
+				smallSizeUrl = post.Photos[i].BigSize.Url
+			}
+		}
+
+		post.Photos[i].BigSize.Content = bigSize
+		post.Photos[i].SmallSize.Content = smallSize
+		post.Photos[i].SmallSize.Url = smallSizeUrl
+	}
+
+	return nil
+}
+
+func (c *Client) downloadPhoto(url string) ([]byte, error) {
+	c.limiter.Wait(c.ctx)
+
+	resp, err := c.httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
 }
 
 func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {

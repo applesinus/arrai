@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -79,9 +80,32 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 
 // SAVE
 
-func (c *Client) savePost(filePath string, post domain.Post) (int, error) {
+func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, error) {
 	if c.isPathExists(filePath) {
 		return -1, repository.ERR_POST_EXISTS
+	}
+
+	if len(post.Photos) > 0 {
+		photoDirPath := fmt.Sprintf("%s/%d", dirPath, post.ID)
+		if !c.isPathExists(photoDirPath) {
+			err := os.MkdirAll(photoDirPath, 0755)
+			if err != nil {
+				return -1, err
+			}
+		}
+
+		for i, photo := range post.Photos {
+			photoFilenames, err := c.savePhoto(photoDirPath, fmt.Sprintf("%d.jpg", i), photo)
+			if err != nil {
+				return -1, err
+			}
+
+			post.Photos[i].BigSize.Filename = photoFilenames[0]
+			post.Photos[i].BigSize.Content = []byte{}
+
+			post.Photos[i].SmallSize.Filename = photoFilenames[1]
+			post.Photos[i].SmallSize.Content = []byte{}
+		}
 	}
 
 	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
@@ -89,8 +113,6 @@ func (c *Client) savePost(filePath string, post domain.Post) (int, error) {
 		return -1, err
 	}
 	defer file.Close()
-
-	c.logger.Debug("Opened file")
 
 	jsonBytes, err := json.MarshalIndent(post, "", "  ")
 	if err != nil {
@@ -105,11 +127,49 @@ func (c *Client) savePost(filePath string, post domain.Post) (int, error) {
 	return post.ID, nil
 }
 
+func (c *Client) savePhoto(dirPath, filename string, photo domain.TwoSizesPhoto) ([]string, error) {
+	filenames := make([]string, 2)
+
+	name := filename
+	if c.isPathExists(fmt.Sprintf("%s/%s", dirPath, name)) {
+		return nil, repository.ERR_PHOTO_EXISTS
+	}
+	err := c.saveOneSizePhoto(dirPath, name, photo.BigSize)
+	if err != nil {
+		return nil, err
+	}
+	filenames[0] = name
+
+	name = fmt.Sprintf("%s%s", repository.PHOTO_SMALL_PREFIX, filename)
+	if c.isPathExists(fmt.Sprintf("%s/%s", dirPath, name)) {
+		return nil, repository.ERR_PHOTO_EXISTS
+	}
+	err = c.saveOneSizePhoto(dirPath, name, photo.SmallSize)
+	if err != nil {
+		return nil, err
+	}
+	filenames[1] = name
+
+	return filenames, nil
+}
+
+func (c *Client) saveOneSizePhoto(dirPath, filename string, photo domain.Photo) error {
+	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, filename), os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	file.Write(photo.Content)
+
+	return nil
+}
+
 func (c *Client) SavePost(serviceName, authorID string, post domain.Post) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.savePost(c.filePath(serviceName, authorID, post.ID), post)
+	return c.savePost(c.directoryPath(serviceName, authorID), c.filePath(serviceName, authorID, post.ID), post)
 }
 
 func (c *Client) SavePosts(serviceName, authorID string, posts []domain.Post) (map[int]int, error) {
@@ -118,7 +178,7 @@ func (c *Client) SavePosts(serviceName, authorID string, posts []domain.Post) (m
 
 	postIDs := make(map[int]int, len(posts))
 	for _, post := range posts {
-		id, err := c.savePost(c.filePath(serviceName, authorID, post.ID), post)
+		id, err := c.savePost(c.directoryPath(serviceName, authorID), c.filePath(serviceName, authorID, post.ID), post)
 		if err != nil {
 			return nil, err
 		}
@@ -139,15 +199,65 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 		return post, repository.ERR_POST_NOT_FOUND
 	}
 
-	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
+	file, err := os.OpenFile(filePath, os.O_RDONLY, 0644)
 	if err != nil {
 		return post, err
 	}
 	defer file.Close()
 
 	err = json.NewDecoder(file).Decode(&post)
+	if err != nil {
+		return post, err
+	}
+
+	if len(post.Photos) > 0 {
+		photoDirPath := strings.TrimSuffix(filePath, ".json")
+
+		for i := range post.Photos {
+			err := c.readPhoto(photoDirPath, &post.Photos[i])
+			if err != nil {
+				return post, err
+			}
+		}
+	}
 
 	return post, err
+}
+
+func (c *Client) readPhoto(dirPath string, photo *domain.TwoSizesPhoto) error {
+	c.logger.Debug("Reading Photos",
+		"dirPath", dirPath,
+		"bigFilename", photo.BigSize.Filename,
+		"smallFilename", photo.SmallSize.Filename,
+	)
+
+	bigPhoto, err := c.getOneSizePhoto(dirPath, photo.BigSize.Filename)
+	if err != nil {
+		return err
+	}
+	photo.BigSize.Content = bigPhoto
+
+	smallPhoto, err := c.getOneSizePhoto(dirPath, photo.SmallSize.Filename)
+	if err != nil {
+		return err
+	}
+	photo.SmallSize.Content = smallPhoto
+
+	return nil
+}
+
+func (c *Client) getOneSizePhoto(dirPath, filename string) ([]byte, error) {
+	if !c.isPathExists(fmt.Sprintf("%s/%s", dirPath, filename)) {
+		return nil, repository.ERR_PHOTO_NOT_FOUND
+	}
+
+	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, filename), os.O_RDONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return io.ReadAll(file)
 }
 
 func (c *Client) GetPost(serviceName, authorID string, postID int) (domain.Post, error) {

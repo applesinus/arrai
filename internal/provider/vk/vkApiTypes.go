@@ -35,6 +35,9 @@ type vkWallPost struct {
 	Attachments []struct {
 		Type  string `json:"type"`
 		Photo struct {
+			Sizes []struct {
+				Url string `json:"url"`
+			}
 			OrigPhoto struct {
 				Url string `json:"url"`
 			} `json:"orig_photo"`
@@ -48,6 +51,31 @@ type vkWallPost struct {
 func (p vkWallPost) toDomain() (domain.Post, error) {
 	creationTime := time.Unix(int64(p.CreatedAt), 0)
 
+	photos := make([]domain.TwoSizesPhoto, 0)
+	for _, attachment := range p.Attachments {
+		if attachment.Type == ATTACHMENT_PHOTO {
+			smallSizeUrl := ""
+
+			switch len(attachment.Photo.Sizes) {
+			case 0:
+				smallSizeUrl = attachment.Photo.OrigPhoto.Url
+			case 1:
+				smallSizeUrl = attachment.Photo.Sizes[0].Url
+			default:
+				smallSizeUrl = attachment.Photo.Sizes[1].Url
+			}
+
+			photos = append(photos, domain.TwoSizesPhoto{
+				BigSize: domain.Photo{
+					Url: attachment.Photo.OrigPhoto.Url,
+				},
+				SmallSize: domain.Photo{
+					Url: smallSizeUrl,
+				},
+			})
+		}
+	}
+
 	post := domain.Post{
 		ID:        p.ID,
 		OwnerID:   p.OwnerID,
@@ -56,7 +84,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 		Reactions: p.Reactions.Count,
 		Reposts:   p.Reposts.Count,
 		Text:      p.Text,
-		Photos:    nil,
+		Photos:    photos,
 		Comments:  nil,
 	}
 

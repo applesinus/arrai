@@ -82,6 +82,8 @@ func main() {
 
 	// Save posts to repository
 	if debugMode {
+		defer repo.Clear(providerType, authorID)
+
 		postID, err := repo.SavePost(providerType, authorID, (*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
@@ -101,15 +103,23 @@ func main() {
 			)
 			return
 		}
-
 		logger.Debug("Existing post IDs fetched from repository",
 			"post_ids", postIDs,
 		)
 
+		post, err := repo.GetPost(providerType, authorID, postIDs[0])
+		if err != nil {
+			logger.Error("failed to get first post from repository",
+				"error", err,
+			)
+			return
+		}
+		logger.Debug("First post fetched from repository",
+			"post", post,
+		)
+
 		fmt.Print("Enter to clear debug repo: ")
 		scanner.Scan()
-
-		repo.Clear(providerType, authorID)
 	} else {
 		repo.SavePosts(providerType, authorID, *posts)
 	}
