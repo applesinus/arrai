@@ -249,9 +249,9 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 		return post, err
 	}
 
-	if len(post.Photos) > 0 {
-		photoDirPath := strings.TrimSuffix(filePath, ".json")
+	photoDirPath := strings.TrimSuffix(filePath, ".json")
 
+	if len(post.Photos) > 0 {
 		for i := range post.Photos {
 			err := c.readPhoto(photoDirPath, &post.Photos[i])
 			if err != nil {
@@ -260,7 +260,32 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 		}
 	}
 
+	if len(post.Comments) > 0 {
+		err = c.fillCommentsPhotos(photoDirPath, &post.Comments)
+		if err != nil {
+			return post, err
+		}
+	}
+
 	return post, err
+}
+
+func (c *Client) fillCommentsPhotos(dirPath string, replies *[]domain.Comment) error {
+	for i := range *replies {
+		for j := range (*replies)[i].Photos {
+			err := c.readPhoto(dirPath, &(*replies)[i].Photos[j])
+			if err != nil {
+				return err
+			}
+		}
+
+		err := c.fillCommentsPhotos(dirPath, &(*replies)[i].Replies)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Client) readPhoto(dirPath string, photo *domain.TwoSizesPhoto) error {
