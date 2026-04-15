@@ -28,7 +28,7 @@ type Client struct {
 }
 
 func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerType string, authorID string) (repository.Repository, error) {
-	basePath := appEnv.MustGet("DISK_REPO_BASE_PATH")
+	basePath := appEnv.MustGet(repository.BASE_PATH_ENV_KEY)
 
 	diskRepo := &Client{
 		mu:     &sync.Mutex{},
