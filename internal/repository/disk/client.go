@@ -27,7 +27,7 @@ type Client struct {
 	basePath string
 }
 
-func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerType string, authorID string) repository.Repository {
+func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerType string, authorID string) (repository.Repository, error) {
 	basePath := appEnv.MustGet("DISK_REPO_BASE_PATH")
 
 	diskRepo := &Client{
@@ -43,39 +43,25 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 	if os.IsNotExist(err) {
 		err := os.MkdirAll(basePath, 0755)
 		if err != nil {
-			logger.Error("failed to create disk repo base path",
-				"error", err,
-			)
-			panic(err)
+			return nil, err
 		}
 	} else if err != nil {
-		logger.Error("failed to create disk repo base path",
-			"error", err,
-		)
-		panic(err)
+		return nil, err
 	}
 
 	// Provider directory
 	err = os.MkdirAll(fmt.Sprintf("%s/%s", basePath, providerType), 0755)
 	if err != nil {
-		logger.Error("failed to create provider path",
-			"provider_type", providerType,
-			"error", err,
-		)
-		panic(err)
+		return nil, err
 	}
 
 	// Author directory
 	err = os.MkdirAll(fmt.Sprintf("%s/%s/%s", basePath, providerType, authorID), 0755)
 	if err != nil {
-		logger.Error("failed to create author path",
-			"wall_id", authorID,
-			"error", err,
-		)
-		panic(err)
+		return nil, err
 	}
 
-	return repository.Repository(diskRepo)
+	return repository.Repository(diskRepo), nil
 }
 
 // SAVE

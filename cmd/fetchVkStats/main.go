@@ -16,6 +16,7 @@ import (
 
 func main() {
 	ctx := context.Background()
+	var err error
 
 	// Create appEnv
 	appEnvLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -53,7 +54,13 @@ func main() {
 	// TODO: save to the real DB
 	var repo repository.Repository
 	if debugMode || desktopMode {
-		repo = disk.New(ctx, logger, appEnv, providerType, authorID)
+		repo, err = disk.New(ctx, logger, appEnv, providerType, authorID)
+		if err != nil {
+			logger.Error("failed to create repository",
+				"error", err,
+			)
+			return
+		}
 	} else {
 		// TODO DB
 		logger.Error("Real DB is not implemented")
