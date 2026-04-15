@@ -3,6 +3,7 @@ package vk
 import (
 	"arrai/internal/domain"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -60,16 +61,16 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 
 			switch len(attachment.Photo.Sizes) {
 			case 0:
-				smallSizeUrl = attachment.Photo.OrigPhoto.Url
+				smallSizeUrl = strings.ReplaceAll(attachment.Photo.OrigPhoto.Url, "\\u0026", "&")
 			case 1:
-				smallSizeUrl = attachment.Photo.Sizes[0].Url
+				smallSizeUrl = strings.ReplaceAll(attachment.Photo.Sizes[0].Url, "\\u0026", "&")
 			default:
-				smallSizeUrl = attachment.Photo.Sizes[1].Url
+				smallSizeUrl = strings.ReplaceAll(attachment.Photo.Sizes[1].Url, "\\u0026", "&")
 			}
 
 			photos = append(photos, domain.TwoSizesPhoto{
 				BigSize: domain.Photo{
-					Url: attachment.Photo.OrigPhoto.Url,
+					Url: strings.ReplaceAll(attachment.Photo.OrigPhoto.Url, "\\u0026", "&"),
 				},
 				SmallSize: domain.Photo{
 					Url: smallSizeUrl,
