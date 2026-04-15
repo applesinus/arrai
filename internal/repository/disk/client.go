@@ -3,11 +3,14 @@ package disk
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +20,11 @@ import (
 	"arrai/internal/repository"
 )
 
+var (
+	ERR_PATH_INVALID = errors.New("invalid path")
+	ERR_PATH_UNSAFE  = errors.New("unsafe path")
+)
+
 type Client struct {
 	mu  *sync.Mutex
 	ctx context.Context
@@ -24,11 +32,32 @@ type Client struct {
 	appEnv *appEnv.AppEnv
 	logger *slog.Logger
 
-	basePath string
+	basePath     string
+	authorID     string
+	providerName string
 }
 
-func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerType string, authorID string) (repository.Repository, error) {
+func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, authorID string) (repository.Repository, error) {
+	if providerName == "" {
+		return nil, repository.ERR_EMPTY_PROVIDER
+	}
+
+	if authorID == "" {
+		return nil, repository.ERR_EMPTY_AUTHOR
+	}
+
 	basePath := appEnv.MustGet(repository.BASE_PATH_ENV_KEY)
+	if basePath == "" {
+		return nil, repository.ERR_EMPTY_BASE_PATH
+	}
+
+	if logger == nil {
+		return nil, repository.ERR_NO_LOGGER
+	}
+
+	if appEnv == nil {
+		return nil, repository.ERR_NO_APP_ENV
+	}
 
 	diskRepo := &Client{
 		mu:     &sync.Mutex{},
@@ -36,7 +65,9 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 		appEnv: appEnv,
 		logger: logger,
 
-		basePath: basePath,
+		basePath:     basePath,
+		authorID:     authorID,
+		providerName: providerName,
 	}
 
 	_, err := os.Stat(basePath)
@@ -50,14 +81,26 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 	}
 
 	// Provider directory
-	err = os.MkdirAll(fmt.Sprintf("%s/%s", basePath, providerType), 0755)
-	if err != nil {
+	providerPath := fmt.Sprintf("%s/%s", basePath, providerName)
+	_, err = os.Stat(providerPath)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(providerPath, 0755)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
 		return nil, err
 	}
 
 	// Author directory
-	err = os.MkdirAll(fmt.Sprintf("%s/%s/%s", basePath, providerType, authorID), 0755)
-	if err != nil {
+	authorPath := fmt.Sprintf("%s/%s", providerPath, authorID)
+	_, err = os.Stat(authorPath)
+	if os.IsNotExist(err) {
+		err := os.MkdirAll(authorPath, 0755)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -190,20 +233,20 @@ func (c *Client) saveOneSizePhoto(dirPath, filename string, photo domain.Photo) 
 	return nil
 }
 
-func (c *Client) SavePost(serviceName, authorID string, post domain.Post) (int, error) {
+func (c *Client) SavePost(post domain.Post) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.savePost(c.directoryPath(serviceName, authorID), c.filePath(serviceName, authorID, post.ID), post)
+	return c.savePost(c.directoryPath(), c.filePath(post.ID), post)
 }
 
-func (c *Client) SavePosts(serviceName, authorID string, posts []domain.Post) (map[int]int, error) {
+func (c *Client) SavePosts(posts []domain.Post) (map[int]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	postIDs := make(map[int]int, len(posts))
 	for _, post := range posts {
-		id, err := c.savePost(c.directoryPath(serviceName, authorID), c.filePath(serviceName, authorID, post.ID), post)
+		id, err := c.savePost(c.directoryPath(), c.filePath(post.ID), post)
 		if err != nil {
 			return nil, err
 		}
@@ -310,21 +353,21 @@ func (c *Client) getOneSizePhoto(dirPath, filename string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
-func (c *Client) GetPost(serviceName, authorID string, postID int) (domain.Post, error) {
+func (c *Client) GetPost(postID int) (domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.getPost(c.filePath(serviceName, authorID, postID))
+	return c.getPost(c.filePath(postID))
 }
 
-func (c *Client) GetPosts(serviceName, authorID string, postIDs []int) ([]domain.Post, error) {
+func (c *Client) GetPosts(postIDs []int) ([]domain.Post, error) {
 	posts := make([]domain.Post, len(postIDs))
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	for i, postID := range postIDs {
-		post, err := c.getPost(c.filePath(serviceName, authorID, postID))
+		post, err := c.getPost(c.filePath(postID))
 		if err != nil {
 			return nil, err
 		}
@@ -366,18 +409,18 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	return postIDs, nil
 }
 
-func (c *Client) GetExistingPostIDs(serviceName, authorID string) ([]int, error) {
+func (c *Client) GetExistingPostIDs() ([]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.getExistingPostIDs(c.directoryPath(serviceName, authorID))
+	return c.getExistingPostIDs(c.directoryPath())
 }
 
-func (c *Client) GetAllPosts(serviceName, authorID string) ([]domain.Post, error) {
+func (c *Client) GetAllPosts() ([]domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	postIDs, err := c.getExistingPostIDs(c.directoryPath(serviceName, authorID))
+	postIDs, err := c.getExistingPostIDs(c.directoryPath())
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +428,7 @@ func (c *Client) GetAllPosts(serviceName, authorID string) ([]domain.Post, error
 	posts := make([]domain.Post, len(postIDs))
 
 	for i, postID := range postIDs {
-		post, err := c.getPost(c.filePath(serviceName, authorID, postID))
+		post, err := c.getPost(c.filePath(postID))
 		if err != nil {
 			return nil, err
 		}
@@ -418,18 +461,34 @@ func (c *Client) updatePost(filePath string, post domain.Post) error {
 	return err
 }
 
-func (c *Client) UpdatePost(serviceName, authorID string, post domain.Post) error {
+func (c *Client) UpdatePost(post domain.Post) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.updatePost(c.filePath(serviceName, authorID, post.ID), post)
+	return c.updatePost(c.filePath(post.ID), post)
 }
 
-func (c *Client) UpdatePosts(serviceName, authorID string, posts []domain.Post) error {
+func (c *Client) UpdatePosts(posts []domain.Post) error {
 	for _, post := range posts {
-		err := c.updatePost(c.filePath(serviceName, authorID, post.ID), post)
+		err := c.updatePost(c.filePath(post.ID), post)
 		if err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) UpdateOrSavePosts(posts []domain.Post) error {
+	for _, post := range posts {
+		err := c.updatePost(c.filePath(post.ID), post)
+		if err != nil {
+			if err == repository.ERR_POST_NOT_FOUND {
+				_, err = c.savePost(c.directoryPath(), c.filePath(post.ID), post)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -446,11 +505,11 @@ func (c *Client) deletePost(filePath string) error {
 	return os.Remove(filePath)
 }
 
-func (c *Client) DeletePost(serviceName, authorID string, postID int) error {
+func (c *Client) DeletePost(postID int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.deletePost(c.filePath(serviceName, authorID, postID))
+	return c.deletePost(c.filePath(postID))
 }
 
 func (c *Client) clear(dirPath string) error {
@@ -461,21 +520,21 @@ func (c *Client) clear(dirPath string) error {
 	return os.RemoveAll(dirPath)
 }
 
-func (c *Client) Clear(serviceName, authorID string) error {
+func (c *Client) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.clear(c.directoryPath(serviceName, authorID))
+	return c.clear(c.directoryPath())
 }
 
 // HELPERS
 
-func (c *Client) filePath(serviceName, authorID string, postID int) string {
-	return fmt.Sprintf("%s/%d.json", c.directoryPath(serviceName, authorID), postID)
+func (c *Client) filePath(postID int) string {
+	return fmt.Sprintf("%s/%d.json", c.directoryPath(), postID)
 }
 
-func (c *Client) directoryPath(serviceName, authorID string) string {
-	return fmt.Sprintf("%s/%s/%s", c.basePath, serviceName, authorID)
+func (c *Client) directoryPath() string {
+	return fmt.Sprintf("%s/%s/%s", c.basePath, c.providerName, c.authorID)
 }
 
 func (c *Client) isPathExists(path string) bool {
@@ -485,4 +544,43 @@ func (c *Client) isPathExists(path string) bool {
 
 func (c *Client) revealInExplorer(path string) error {
 	return exec.Command("explorer", path).Start()
+}
+
+func (c *Client) isPathValid(path string) error {
+	if path == "" {
+		return ERR_PATH_INVALID
+	}
+
+	if strings.ContainsRune(path, 0) {
+		return ERR_PATH_INVALID
+	}
+
+	cleaned := filepath.Clean(path)
+
+	if cleaned == "." && path != "." {
+		return ERR_PATH_INVALID
+	}
+
+	if runtime.GOOS == "windows" {
+		if strings.ContainsAny(path, `<>:"|?*`) {
+			return ERR_PATH_INVALID
+		}
+	}
+
+	if !c.isSafePath(c.basePath, cleaned) {
+		return ERR_PATH_UNSAFE
+	}
+
+	return nil
+}
+
+func (c *Client) isSafePath(baseDir, userPath string) bool {
+	finalPath := filepath.Join(baseDir, userPath)
+
+	rel, err := filepath.Rel(baseDir, finalPath)
+	if err != nil {
+		return false
+	}
+
+	return !strings.HasPrefix(rel, "..") && rel != ".."
 }

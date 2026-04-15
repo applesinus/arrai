@@ -36,9 +36,9 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Printf("Avaliable providers: %v\nDefault is 'vk'\nEnter provider type: ", provider.ProviderTypes)
 	scanner.Scan()
-	providerType := scanner.Text()
-	if _, ok := provider.ProviderTypes[providerType]; !ok {
-		providerType = "vk"
+	providerName := scanner.Text()
+	if _, ok := provider.ProviderTypes[providerName]; !ok {
+		providerName = "vk"
 	}
 
 	// Create VK client
@@ -54,7 +54,7 @@ func main() {
 	// TODO: save to the real DB
 	var repo repository.Repository
 	if debugMode || desktopMode {
-		repo, err = disk.New(ctx, logger, appEnv, providerType, authorID)
+		repo, err = disk.New(ctx, logger, appEnv, providerName, authorID)
 		if err != nil {
 			logger.Error("failed to create repository",
 				"error", err,
@@ -89,9 +89,9 @@ func main() {
 
 	// Save posts to repository
 	if debugMode {
-		defer repo.Clear(providerType, authorID)
+		defer repo.Clear()
 
-		postID, err := repo.SavePost(providerType, authorID, (*posts)[0])
+		postID, err := repo.SavePost((*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -103,7 +103,7 @@ func main() {
 			"post_id", postID,
 		)
 
-		postIDs, err := repo.GetExistingPostIDs(providerType, authorID)
+		postIDs, err := repo.GetExistingPostIDs()
 		if err != nil {
 			logger.Error("failed to get existing post IDs from repository",
 				"error", err,
@@ -114,7 +114,7 @@ func main() {
 			"post_ids", postIDs,
 		)
 
-		post, err := repo.GetPost(providerType, authorID, postIDs[0])
+		post, err := repo.GetPost(postIDs[0])
 		if err != nil {
 			logger.Error("failed to get first post from repository",
 				"error", err,
@@ -129,6 +129,6 @@ func main() {
 		fmt.Print("Enter to clear debug repo: ")
 		scanner.Scan()
 	} else {
-		repo.SavePosts(providerType, authorID, *posts)
+		repo.SavePosts(*posts)
 	}
 }
