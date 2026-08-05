@@ -2,3 +2,6 @@
 
 # debug disk repository path by default
 diskRepo/
+
+# temp files e.g. for testing
+temp/
