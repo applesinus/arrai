@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"arrai/config/appEnv"
 	"arrai/internal/provider"
@@ -79,6 +80,13 @@ func main() {
 		return
 	}
 
+	// Timer setup
+	startTime := time.Now()
+	defer func() {
+		fmt.Printf("\n==========\n\nExecution time: %v", time.Since(startTime))
+	}()
+	go timer(ctx, logger, wg, startTime)
+
 	// Get posts using API
 	posts, err := client.GetPosts(ctx, authorID)
 	if err != nil {
@@ -145,5 +153,28 @@ func main() {
 	}
 }
 
+func timer(ctx context.Context, logger *slog.Logger, wg *sync.WaitGroup, timeStart time.Time) {
+	wg.Add(1)
+	defer func() {
+		wg.Done()
+		logger.Info("Timer stopped")
+	}()
+
+	logger.Info("Timer started")
+
+	timer := time.NewTimer(1 * time.Minute)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			minutesPassed := int(time.Since(timeStart).Minutes())
+			logger.Info("WIP",
+				"minutes_passed", minutesPassed,
+			)
+			timer.Reset(time.Minute * time.Duration(minutesPassed%10+1))
+		}
 	}
 }
