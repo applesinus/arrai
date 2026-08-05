@@ -174,32 +174,32 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 	return &posts, nil
 }
 
-func (c *Client) fillPhotos(photos *[]domain.TwoSizesPhoto) error {
+func (c *Client) fillPhotos(photos *[]domain.PhotoWithPreview) error {
 	for i := range *photos {
-		bigSize, err := c.downloadPhoto((*photos)[i].BigSize.Url)
+		photo, err := c.downloadPhoto((*photos)[i].Self.Url)
 		if err != nil {
 			return err
 		}
 
-		smallSize := bigSize
-		smallSizeUrl := (*photos)[i].SmallSize.Url
+		preview := photo
+		previewUrl := (*photos)[i].Preview.Url
 
-		if smallSizeUrl != (*photos)[i].BigSize.Url {
-			smallSize, err = c.downloadPhoto(smallSizeUrl)
+		if previewUrl != (*photos)[i].Self.Url {
+			preview, err = c.downloadPhoto(previewUrl)
 			if err != nil {
 				c.logger.Error("Cannot download small size photo, using big size copy instead",
 					"error", err,
-					"photo_url", smallSizeUrl,
+					"photo_url", previewUrl,
 				)
 
-				smallSize = bigSize
-				smallSizeUrl = (*photos)[i].BigSize.Url
+				preview = photo
+				previewUrl = (*photos)[i].Self.Url
 			}
 		}
 
-		(*photos)[i].BigSize.Content = bigSize
-		(*photos)[i].SmallSize.Content = smallSize
-		(*photos)[i].SmallSize.Url = smallSizeUrl
+		(*photos)[i].Self.Content = photo
+		(*photos)[i].Preview.Content = preview
+		(*photos)[i].Preview.Url = previewUrl
 	}
 
 	return nil
@@ -243,7 +243,10 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 		}
 
 		for _, comment := range response.Response.Items {
-			newComment := comment.toDomain()
+			newComment, err := comment.toDomain(authorID)
+			if err != nil {
+				return nil, err
+			}
 			comments = append(comments, newComment)
 
 			if len(comments[len(comments)-1].Photos) > 0 {
@@ -299,7 +302,10 @@ func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) erro
 		}
 
 		for _, reply := range response.Response.Items {
-			newReply := reply.toDomain()
+			newReply, err := reply.toDomain(authorID)
+			if err != nil {
+				return err
+			}
 			comment.Replies = append(comment.Replies, newReply)
 
 			if len(comment.Replies[len(comment.Replies)-1].Photos) > 0 {

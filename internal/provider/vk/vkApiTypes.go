@@ -8,23 +8,26 @@ import (
 )
 
 type Attachment struct {
-	Type  string `json:"type"`
+	Type  *string `json:"type"`
 	Photo struct {
 		Sizes []struct {
 			Url string `json:"url"`
 		}
 		OrigPhoto struct {
-			Url string `json:"url"`
+			Url *string `json:"url"`
 		} `json:"orig_photo"`
 	} `json:"photo"`
 }
 
 type vkWallPost struct {
+	// ID
+	ID *int `json:"id"`
+
 	// OwnerID
-	OwnerID int `json:"owner_id"`
+	OwnerID *int `json:"owner_id"`
 
 	// CreatedAt
-	CreatedAt int `json:"date"`
+	CreatedAt *int `json:"date"`
 
 	// Views
 	Views struct {
@@ -42,51 +45,72 @@ type vkWallPost struct {
 	} `json:"reposts"`
 
 	// Text
-	Text string `json:"text"`
+	Text *string `json:"text"`
 
 	// Photos
 	Attachments []Attachment `json:"attachments"`
-
-	// ID is for comments
-	ID int `json:"id"`
 }
 
 func (p vkWallPost) toDomain() (domain.Post, error) {
-	creationTime := time.Unix(int64(p.CreatedAt), 0)
+	if p.ID == nil {
+		return domain.Post{}, domain.ERROR_NO_POST_ID
+	}
+	if p.Text == nil {
+		return domain.Post{}, domain.ERROR_NO_TEXT
+	}
 
-	photos := make([]domain.TwoSizesPhoto, 0)
-	for _, attachment := range p.Attachments {
-		if attachment.Type == ATTACHMENT_PHOTO {
-			smallSizeUrl := ""
+	if p.OwnerID == nil {
+		p.OwnerID = p.OwnerID
+	}
 
-			switch len(attachment.Photo.Sizes) {
-			case 0:
-				smallSizeUrl = strings.ReplaceAll(attachment.Photo.OrigPhoto.Url, "\\u0026", "&")
-			case 1:
-				smallSizeUrl = strings.ReplaceAll(attachment.Photo.Sizes[0].Url, "\\u0026", "&")
-			default:
-				smallSizeUrl = strings.ReplaceAll(attachment.Photo.Sizes[1].Url, "\\u0026", "&")
+	creationTime := creationTimeOrDefault(p.CreatedAt)
+
+	photos := make([]domain.PhotoWithPreview, 0)
+	if p.Attachments != nil {
+		for _, attachment := range p.Attachments {
+			if attachment.Type == nil {
+				continue
+			}
+			if attachment.Photo.OrigPhoto.Url == nil {
+				if attachment.Photo.Sizes == nil || len(attachment.Photo.Sizes) == 0 {
+					continue
+				} else {
+					attachment.Photo.OrigPhoto.Url = &attachment.Photo.Sizes[len(attachment.Photo.Sizes)-1].Url
+				}
 			}
 
-			photos = append(photos, domain.TwoSizesPhoto{
-				BigSize: domain.Photo{
-					Url: strings.ReplaceAll(attachment.Photo.OrigPhoto.Url, "\\u0026", "&"),
-				},
-				SmallSize: domain.Photo{
-					Url: smallSizeUrl,
-				},
-			})
+			if *attachment.Type == ATTACHMENT_PHOTO {
+				smallSizeUrl := ""
+
+				switch len(attachment.Photo.Sizes) {
+				case 0:
+					smallSizeUrl = *attachment.Photo.OrigPhoto.Url
+				case 1:
+					smallSizeUrl = attachment.Photo.Sizes[0].Url
+				default:
+					smallSizeUrl = attachment.Photo.Sizes[1].Url
+				}
+
+				photos = append(photos, domain.PhotoWithPreview{
+					Self: domain.Photo{
+						Url: parseUrl(*attachment.Photo.OrigPhoto.Url),
+					},
+					Preview: domain.Photo{
+						Url: parseUrl(smallSizeUrl),
+					},
+				})
+			}
 		}
 	}
 
 	post := domain.Post{
-		ID:        p.ID,
-		OwnerID:   p.OwnerID,
+		ID:        *p.ID,
+		OwnerID:   *p.OwnerID,
 		CreatedAt: creationTime,
 		Views:     p.Views.Count,
 		Reactions: p.Reactions.Count,
 		Reposts:   p.Reposts.Count,
-		Text:      p.Text,
+		Text:      *p.Text,
 		Photos:    photos,
 		Comments:  nil,
 	}
@@ -96,48 +120,51 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 
 type vkComment struct {
 	// Base
-	ID int `json:"id"`
+	ID *int `json:"id"`
 
 	// CreatedAt
-	CreatedAt int `json:"date"`
+	CreatedAt *int `json:"date"`
 
 	// Text
-	User     int  `json:"from_id"`
-	IsAuthor bool `json:"is_from_post_author"`
+	User *int `json:"from_id"`
 
-	Text  string `json:"text"`
+	Text  *string `json:"text"`
 	Likes struct {
-		Count int `json:"count"`
+		Count *int `json:"count"`
 	} `json:"likes"`
 
 	Attachments []Attachment `json:"attachments"`
 	Thread      struct {
-		Count int `json:"count"`
+		Count *int `json:"count"`
 	} `json:"thread"`
 }
 
-func (c vkComment) toDomain() domain.Comment {
-	creationTime := time.Unix(int64(c.CreatedAt), 0)
+func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
+	if c.ID == nil {
+		return domain.Comment{}, domain.ERROR_NO_COMMENT_ID
+	}
 
-	photos := make([]domain.TwoSizesPhoto, 0)
+	creationTime := creationTimeOrDefault(c.CreatedAt)
+
+	photos := make([]domain.PhotoWithPreview, 0)
 	for _, attachment := range c.Attachments {
-		if attachment.Type == ATTACHMENT_PHOTO {
+		if *attachment.Type == ATTACHMENT_PHOTO {
 			smallSizeUrl := ""
 
 			switch len(attachment.Photo.Sizes) {
 			case 0:
-				smallSizeUrl = attachment.Photo.OrigPhoto.Url
+				smallSizeUrl = *attachment.Photo.OrigPhoto.Url
 			case 1:
 				smallSizeUrl = attachment.Photo.Sizes[0].Url
 			default:
 				smallSizeUrl = attachment.Photo.Sizes[1].Url
 			}
 
-			photos = append(photos, domain.TwoSizesPhoto{
-				BigSize: domain.Photo{
-					Url: attachment.Photo.OrigPhoto.Url,
+			photos = append(photos, domain.PhotoWithPreview{
+				Self: domain.Photo{
+					Url: *attachment.Photo.OrigPhoto.Url,
 				},
-				SmallSize: domain.Photo{
+				Preview: domain.Photo{
 					Url: smallSizeUrl,
 				},
 			})
@@ -145,15 +172,28 @@ func (c vkComment) toDomain() domain.Comment {
 	}
 
 	return domain.Comment{
-		ID:        c.ID,
+		ID:        *c.ID,
 		CreatedAt: creationTime,
 
 		User:      fmt.Sprintf("%d", c.User),
-		IsAuthor:  c.IsAuthor,
-		Reactions: c.Likes.Count,
+		IsAuthor:  *c.User == wallAuthorID,
+		Reactions: *c.Likes.Count,
 
-		Text:    c.Text,
+		Text:    *c.Text,
 		Photos:  photos,
 		Replies: nil,
+	}, nil
+}
+
+func creationTimeOrDefault(creationTime *int) time.Time {
+	returnInt := domain.PLACEHOLDER_TIME
+	if creationTime != nil {
+		returnInt = *creationTime
 	}
+
+	return time.Unix(int64(returnInt), 0).Truncate(0)
+}
+
+func parseUrl(url string) string {
+	return strings.ReplaceAll(url, "\\u0026", "&")
 }

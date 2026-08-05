@@ -110,14 +110,17 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 // SAVE
 
 func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, error) {
-	if c.isPathExists(filePath) {
+	if c.isPathExist(filePath) {
 		return -1, repository.ERR_POST_EXISTS
+	}
+	if post.ID == -1 {
+		return -1, domain.ERROR_NO_POST_ID
 	}
 
 	photoDirPath := fmt.Sprintf("%s/%d", dirPath, post.ID)
 
 	if len(post.Photos) > 0 {
-		if !c.isPathExists(photoDirPath) {
+		if !c.isPathExist(photoDirPath) {
 			err := os.MkdirAll(photoDirPath, 0755)
 			if err != nil {
 				return -1, err
@@ -130,11 +133,11 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 				return -1, err
 			}
 
-			post.Photos[i].BigSize.Filename = photoFilenames[0]
-			post.Photos[i].BigSize.Content = []byte{}
+			post.Photos[i].Self.Filename = photoFilenames[0]
+			post.Photos[i].Self.Content = []byte{}
 
-			post.Photos[i].SmallSize.Filename = photoFilenames[1]
-			post.Photos[i].SmallSize.Content = []byte{}
+			post.Photos[i].Preview.Filename = photoFilenames[1]
+			post.Photos[i].Preview.Content = []byte{}
 		}
 	}
 
@@ -165,7 +168,7 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) error {
 	for i, comment := range *comments {
 		if len(comment.Photos) > 0 {
-			if !c.isPathExists(fmt.Sprintf("%s/%d", dirPath, comment.ID)) {
+			if !c.isPathExist(fmt.Sprintf("%s/%d", dirPath, comment.ID)) {
 				err := os.MkdirAll(fmt.Sprintf("%s/%d", dirPath, comment.ID), 0755)
 				if err != nil {
 					return err
@@ -178,11 +181,11 @@ func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) 
 					return err
 				}
 
-				comment.Photos[j].BigSize.Filename = photoFilenames[0]
-				comment.Photos[j].BigSize.Content = []byte{}
+				comment.Photos[j].Self.Filename = photoFilenames[0]
+				comment.Photos[j].Self.Content = []byte{}
 
-				comment.Photos[j].SmallSize.Filename = photoFilenames[1]
-				comment.Photos[j].SmallSize.Content = []byte{}
+				comment.Photos[j].Preview.Filename = photoFilenames[1]
+				comment.Photos[j].Preview.Content = []byte{}
 			}
 		}
 
@@ -195,24 +198,24 @@ func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) 
 	return nil
 }
 
-func (c *Client) savePhoto(dirPath, filename string, photo domain.TwoSizesPhoto) ([]string, error) {
+func (c *Client) savePhoto(dirPath, filename string, photo domain.PhotoWithPreview) ([]string, error) {
 	filenames := make([]string, 2)
 
 	name := filename
-	if c.isPathExists(fmt.Sprintf("%s/%s", dirPath, name)) {
+	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
 		return nil, repository.ERR_PHOTO_EXISTS
 	}
-	err := c.saveOneSizePhoto(dirPath, name, photo.BigSize)
+	err := c.savePhotoEntry(dirPath, name, photo.Self)
 	if err != nil {
 		return nil, err
 	}
 	filenames[0] = name
 
 	name = fmt.Sprintf("%s%s", repository.PHOTO_SMALL_PREFIX, filename)
-	if c.isPathExists(fmt.Sprintf("%s/%s", dirPath, name)) {
+	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
 		return nil, repository.ERR_PHOTO_EXISTS
 	}
-	err = c.saveOneSizePhoto(dirPath, name, photo.SmallSize)
+	err = c.savePhotoEntry(dirPath, name, photo.Preview)
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +224,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.TwoSizesPhoto)
 	return filenames, nil
 }
 
-func (c *Client) saveOneSizePhoto(dirPath, filename string, photo domain.Photo) error {
+func (c *Client) savePhotoEntry(dirPath, filename string, photo domain.Photo) error {
 	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, filename), os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
@@ -317,30 +320,30 @@ func (c *Client) fillCommentsPhotos(dirPath string, replies *[]domain.Comment) e
 	return nil
 }
 
-func (c *Client) readPhoto(dirPath string, photo *domain.TwoSizesPhoto) error {
+func (c *Client) readPhoto(dirPath string, photo *domain.PhotoWithPreview) error {
 	c.logger.Debug("Reading Photos",
 		"dirPath", dirPath,
-		"bigFilename", photo.BigSize.Filename,
-		"smallFilename", photo.SmallSize.Filename,
+		"bigFilename", photo.Self.Filename,
+		"smallFilename", photo.Preview.Filename,
 	)
 
-	bigPhoto, err := c.getOneSizePhoto(dirPath, photo.BigSize.Filename)
+	bigPhoto, err := c.getPhotoEntry(dirPath, photo.Self.Filename)
 	if err != nil {
 		return err
 	}
-	photo.BigSize.Content = bigPhoto
+	photo.Self.Content = bigPhoto
 
-	smallPhoto, err := c.getOneSizePhoto(dirPath, photo.SmallSize.Filename)
+	smallPhoto, err := c.getPhotoEntry(dirPath, photo.Preview.Filename)
 	if err != nil {
 		return err
 	}
-	photo.SmallSize.Content = smallPhoto
+	photo.Preview.Content = smallPhoto
 
 	return nil
 }
 
-func (c *Client) getOneSizePhoto(dirPath, filename string) ([]byte, error) {
-	if !c.isPathExists(fmt.Sprintf("%s/%s", dirPath, filename)) {
+func (c *Client) getPhotoEntry(dirPath, filename string) ([]byte, error) {
+	if !c.isPathExist(fmt.Sprintf("%s/%s", dirPath, filename)) {
 		return nil, repository.ERR_PHOTO_NOT_FOUND
 	}
 
@@ -383,7 +386,7 @@ func (c *Client) GetPosts(postIDs []int) ([]domain.Post, error) {
 func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	postIDs := make([]int, 0)
 
-	if !c.isPathExists(dirPath) {
+	if !c.isPathExist(dirPath) {
 		return postIDs, nil
 	}
 
@@ -442,7 +445,7 @@ func (c *Client) GetAllPosts() ([]domain.Post, error) {
 // UPDATE
 
 func (c *Client) updatePost(filePath string, post domain.Post) error {
-	if !c.isPathExists(filePath) {
+	if !c.isPathExist(filePath) {
 		return repository.ERR_POST_NOT_FOUND
 	}
 
@@ -498,7 +501,7 @@ func (c *Client) UpdateOrSavePosts(posts []domain.Post) error {
 // DELETE
 
 func (c *Client) deletePost(filePath string) error {
-	if c.isPathExists(filePath) {
+	if c.isPathExist(filePath) {
 		return repository.ERR_POST_NOT_FOUND
 	}
 
@@ -513,7 +516,7 @@ func (c *Client) DeletePost(postID int) error {
 }
 
 func (c *Client) clear(dirPath string) error {
-	if !c.isPathExists(dirPath) {
+	if !c.isPathExist(dirPath) {
 		return nil
 	}
 
@@ -537,7 +540,7 @@ func (c *Client) directoryPath() string {
 	return fmt.Sprintf("%s/%s/%s", c.basePath, c.providerName, c.authorID)
 }
 
-func (c *Client) isPathExists(path string) bool {
+func (c *Client) isPathExist(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
 }
