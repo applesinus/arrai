@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 
 	"golang.org/x/time/rate"
 
@@ -17,7 +18,7 @@ import (
 )
 
 type Client struct {
-	ctx    context.Context
+	wg     *sync.WaitGroup
 	logger *slog.Logger
 	env    *appEnv.AppEnv
 
@@ -28,9 +29,9 @@ type Client struct {
 	debugMode bool
 }
 
-func NewClient(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, accessToken string) provider.Provider {
+func NewClient(wg *sync.WaitGroup, logger *slog.Logger, appEnv *appEnv.AppEnv, accessToken string) provider.Provider {
 	client := &Client{
-		ctx:    ctx,
+		wg:     wg,
 		logger: logger,
 		env:    appEnv,
 
@@ -58,8 +59,8 @@ func (c *Client) createVkApiLink(method string, params map[string]any) string {
 	return fmt.Sprintf("%s%s?access_token=%s%s&v=%s", BASE_URL, method, c.accessToken, paramsString, VK_API_VERSION)
 }
 
-func (c *Client) doVkApiRequest(method string, params map[string]any) ([]byte, error) {
-	err := c.limiter.Wait(c.ctx)
+func (c *Client) doVkApiRequest(ctx context.Context, method string, params map[string]any) ([]byte, error) {
+	err := c.limiter.Wait(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +83,8 @@ func (c *Client) doVkApiRequest(method string, params map[string]any) ([]byte, e
 	return body, nil
 }
 
-func (c *Client) getAuthorIntID(authorID string) (int, error) {
-	resp, err := c.doVkApiRequest(METHOD_RESOLVE_NAME, map[string]any{"screen_name": authorID})
+func (c *Client) getAuthorIntID(ctx context.Context, authorID string) (int, error) {
+	resp, err := c.doVkApiRequest(ctx, METHOD_RESOLVE_NAME, map[string]any{"screen_name": authorID})
 	if err != nil {
 		return 0, err
 	}
@@ -100,8 +101,11 @@ func (c *Client) getAuthorIntID(authorID string) (int, error) {
 	return response.Response.ID, nil
 }
 
-func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
-	authorId, err := c.getAuthorIntID(authorID)
+func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post, error) {
+	c.wg.Add(1)
+	defer c.wg.Done()
+
+	authorId, err := c.getAuthorIntID(ctx, authorID)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +115,7 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 	posts := make([]domain.Post, 0)
 
 	for offset := 0; ; offset += 100 {
-		resp, err := c.doVkApiRequest(METHOD_GET_WALL, map[string]any{
+		resp, err := c.doVkApiRequest(ctx, METHOD_GET_WALL, map[string]any{
 			"domain": authorID,
 			"count":  100,
 			"offset": offset,
@@ -145,38 +149,57 @@ func (c *Client) GetPosts(authorID string) (*[]domain.Post, error) {
 		if c.debugMode {
 			break
 		}
+
+		c.logger.Info("Got posts batch",
+			"iteration", offset/100+1,
+			"total", len(posts),
+		)
 	}
 
 	// Getting comments and photos for all posts
 	for i := range posts {
-		comments, err := c.getComments(authorId, posts[i].ID)
+		comments, err := c.getComments(ctx, authorId, posts[i].ID)
 		if err != nil {
 			c.logger.Error("failed to get comments for post",
 				"post_id", posts[i].ID,
 				"error", err,
 			)
+			if err == context.Canceled {
+				break
+			}
+			continue
 		}
 		posts[i].Comments = *comments
 
-		err = c.fillPhotos(&posts[i].Photos)
+		err = c.fillPhotos(ctx, &posts[i].Photos)
 		if err != nil {
 			c.logger.Error("failed to get photos for post",
 				"post_id", posts[i].ID,
 				"error", err,
 			)
+			if err == context.Canceled {
+				break
+			}
+			continue
 		}
 
 		if c.debugMode {
 			break
+		}
+
+		if len(*comments) != 0 {
+			c.logger.Info("Got post's comments and photos",
+				"total", i,
+			)
 		}
 	}
 
 	return &posts, nil
 }
 
-func (c *Client) fillPhotos(photos *[]domain.PhotoWithPreview) error {
+func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.PhotoWithPreview) error {
 	for i := range *photos {
-		photo, err := c.downloadPhoto((*photos)[i].Self.Url)
+		photo, err := c.downloadPhoto(ctx, (*photos)[i].Self.Url)
 		if err != nil {
 			return err
 		}
@@ -185,7 +208,7 @@ func (c *Client) fillPhotos(photos *[]domain.PhotoWithPreview) error {
 		previewUrl := (*photos)[i].Preview.Url
 
 		if previewUrl != (*photos)[i].Self.Url {
-			preview, err = c.downloadPhoto(previewUrl)
+			preview, err = c.downloadPhoto(ctx, previewUrl)
 			if err != nil {
 				c.logger.Error("Cannot download small size photo, using big size copy instead",
 					"error", err,
@@ -205,8 +228,8 @@ func (c *Client) fillPhotos(photos *[]domain.PhotoWithPreview) error {
 	return nil
 }
 
-func (c *Client) downloadPhoto(url string) ([]byte, error) {
-	c.limiter.Wait(c.ctx)
+func (c *Client) downloadPhoto(ctx context.Context, url string) ([]byte, error) {
+	c.limiter.Wait(ctx)
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
@@ -217,11 +240,11 @@ func (c *Client) downloadPhoto(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
+func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]domain.Comment, error) {
 	comments := make([]domain.Comment, 0)
 
 	for offset := 0; ; offset += 10 {
-		resp, err := c.doVkApiRequest(METHOD_GET_COMMENTS, map[string]any{
+		resp, err := c.doVkApiRequest(ctx, METHOD_GET_COMMENTS, map[string]any{
 			"owner_id":   authorID,
 			"post_id":    postID,
 			"need_likes": 1,
@@ -250,7 +273,7 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 			comments = append(comments, newComment)
 
 			if len(comments[len(comments)-1].Photos) > 0 {
-				err = c.fillPhotos(&comments[len(comments)-1].Photos)
+				err = c.fillPhotos(ctx, &comments[len(comments)-1].Photos)
 				if err != nil {
 					c.logger.Error("failed to get photos for comment",
 						"comment_id", comments[len(comments)-1].ID,
@@ -262,7 +285,7 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 	}
 
 	for i := range comments {
-		err := c.fillReplies(authorID, postID, &comments[i])
+		err := c.fillReplies(ctx, authorID, postID, &comments[i])
 		if err != nil {
 			c.logger.Error("failed to fill replies", "error", err)
 			return nil, err
@@ -273,9 +296,9 @@ func (c *Client) getComments(authorID, postID int) (*[]domain.Comment, error) {
 }
 
 // fillReplies implements DFS
-func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) error {
+func (c *Client) fillReplies(ctx context.Context, authorID, postID int, comment *domain.Comment) error {
 	for offset := 0; ; offset += 10 {
-		resp, err := c.doVkApiRequest(METHOD_GET_COMMENTS, map[string]any{
+		resp, err := c.doVkApiRequest(ctx, METHOD_GET_COMMENTS, map[string]any{
 			"owner_id":   authorID,
 			"post_id":    postID,
 			"comment_id": comment.ID,
@@ -309,7 +332,7 @@ func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) erro
 			comment.Replies = append(comment.Replies, newReply)
 
 			if len(comment.Replies[len(comment.Replies)-1].Photos) > 0 {
-				err = c.fillPhotos(&comment.Replies[len(comment.Replies)-1].Photos)
+				err = c.fillPhotos(ctx, &comment.Replies[len(comment.Replies)-1].Photos)
 				if err != nil {
 					c.logger.Error("failed to get photos for comment",
 						"comment_id", comment.Replies[len(comment.Replies)-1].ID,
@@ -322,7 +345,7 @@ func (c *Client) fillReplies(authorID, postID int, comment *domain.Comment) erro
 				"Text", newReply.Text,
 			)
 
-			err = c.fillReplies(authorID, postID, &newReply)
+			err = c.fillReplies(ctx, authorID, postID, &newReply)
 			if err != nil {
 				return err
 			}

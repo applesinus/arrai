@@ -238,7 +238,7 @@ func TestNew(t *testing.T) {
 			test.setupFunc()
 			defer test.teardownFunc()
 
-			repo, err := disk.New(t.Context(), test.logger, test.appEnv, test.provider, test.author)
+			repo, err := disk.New(test.logger, test.appEnv, test.provider, test.author)
 
 			assert.ErrorIs(t, err, test.errExpected)
 			assert.Equal(t, test.repoNilExpected, repo == nil)
@@ -257,6 +257,7 @@ func TestSavePost(t *testing.T) {
 	// Creating test values
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	env := appEnv.New(logger)
+	ctx := t.Context()
 
 	ID := 1
 	ownerID := 2
@@ -528,7 +529,7 @@ func TestSavePost(t *testing.T) {
 	// Running tests
 	for testName, test := range testsTable {
 		t.Run(testName, func(t *testing.T) {
-			client, err := disk.New(t.Context(), logger, env, testProvider, testAuthor)
+			client, err := disk.New(logger, env, testProvider, testAuthor)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -536,7 +537,7 @@ func TestSavePost(t *testing.T) {
 			test.setupFunc()
 			defer test.teardownFunc()
 
-			gotInt, gotErr := client.SavePost(test.post)
+			gotInt, gotErr := client.SavePost(ctx, test.post)
 			assert.ErrorIs(t, gotErr, test.expextedErr)
 			assert.Equal(t, test.expectedInt, gotInt)
 

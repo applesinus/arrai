@@ -1,6 +1,9 @@
 package provider
 
-import "arrai/internal/domain"
+import (
+	"arrai/internal/domain"
+	"context"
+)
 
 var (
 	ProviderTypes = map[string]struct{}{
@@ -9,5 +12,5 @@ var (
 )
 
 type Provider interface {
-	GetPosts(authorID string) (*[]domain.Post, error)
+	GetPosts(ctx context.Context, authorID string) (*[]domain.Post, error)
 }

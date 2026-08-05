@@ -1,19 +1,22 @@
 package repository
 
-import "arrai/internal/domain"
+import (
+	"arrai/internal/domain"
+	"context"
+)
 
 type Repository interface {
-	SavePost(post domain.Post) (int, error)
-	SavePosts(posts []domain.Post) (map[int]int, error)
+	SavePost(ctx context.Context, post domain.Post) (int, error)
+	SavePosts(ctx context.Context, posts []domain.Post) (map[int]int, error)
 
-	GetPost(postID int) (domain.Post, error)
-	GetPosts(postIDs []int) ([]domain.Post, error)
-	GetAllPosts() ([]domain.Post, error)
-	GetExistingPostIDs() ([]int, error)
+	GetPost(ctx context.Context, postID int) (domain.Post, error)
+	GetPosts(ctx context.Context, postIDs []int) ([]domain.Post, error)
+	GetAllPosts(ctx context.Context) ([]domain.Post, error)
+	GetExistingPostIDs(ctx context.Context) ([]int, error)
 
-	UpdatePost(post domain.Post) error
-	UpdatePosts(posts []domain.Post) error
+	UpdatePost(ctx context.Context, post domain.Post) error
+	UpdatePosts(ctx context.Context, posts []domain.Post) error
 
-	DeletePost(postID int) error
-	Clear() error
+	DeletePost(ctx context.Context, postID int) error
+	Clear(ctx context.Context) error
 }

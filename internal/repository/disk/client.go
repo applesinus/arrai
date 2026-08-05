@@ -26,8 +26,7 @@ var (
 )
 
 type Client struct {
-	mu  *sync.Mutex
-	ctx context.Context
+	mu *sync.Mutex
 
 	appEnv *appEnv.AppEnv
 	logger *slog.Logger
@@ -37,7 +36,7 @@ type Client struct {
 	providerName string
 }
 
-func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, authorID string) (repository.Repository, error) {
+func New(logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, authorID string) (repository.Repository, error) {
 	if providerName == "" {
 		return nil, repository.ERR_EMPTY_PROVIDER
 	}
@@ -61,7 +60,6 @@ func New(ctx context.Context, logger *slog.Logger, appEnv *appEnv.AppEnv, provid
 
 	diskRepo := &Client{
 		mu:     &sync.Mutex{},
-		ctx:    ctx,
 		appEnv: appEnv,
 		logger: logger,
 
@@ -236,14 +234,14 @@ func (c *Client) savePhotoEntry(dirPath, filename string, photo domain.Photo) er
 	return nil
 }
 
-func (c *Client) SavePost(post domain.Post) (int, error) {
+func (c *Client) SavePost(ctx context.Context, post domain.Post) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	return c.savePost(c.directoryPath(), c.filePath(post.ID), post)
 }
 
-func (c *Client) SavePosts(posts []domain.Post) (map[int]int, error) {
+func (c *Client) SavePosts(ctx context.Context, posts []domain.Post) (map[int]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -356,14 +354,14 @@ func (c *Client) getPhotoEntry(dirPath, filename string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
-func (c *Client) GetPost(postID int) (domain.Post, error) {
+func (c *Client) GetPost(ctx context.Context, postID int) (domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	return c.getPost(c.filePath(postID))
 }
 
-func (c *Client) GetPosts(postIDs []int) ([]domain.Post, error) {
+func (c *Client) GetPosts(ctx context.Context, postIDs []int) ([]domain.Post, error) {
 	posts := make([]domain.Post, len(postIDs))
 
 	c.mu.Lock()
@@ -412,14 +410,14 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	return postIDs, nil
 }
 
-func (c *Client) GetExistingPostIDs() ([]int, error) {
+func (c *Client) GetExistingPostIDs(ctx context.Context) ([]int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	return c.getExistingPostIDs(c.directoryPath())
 }
 
-func (c *Client) GetAllPosts() ([]domain.Post, error) {
+func (c *Client) GetAllPosts(ctx context.Context) ([]domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -464,14 +462,14 @@ func (c *Client) updatePost(filePath string, post domain.Post) error {
 	return err
 }
 
-func (c *Client) UpdatePost(post domain.Post) error {
+func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	return c.updatePost(c.filePath(post.ID), post)
 }
 
-func (c *Client) UpdatePosts(posts []domain.Post) error {
+func (c *Client) UpdatePosts(ctx context.Context, posts []domain.Post) error {
 	for _, post := range posts {
 		err := c.updatePost(c.filePath(post.ID), post)
 		if err != nil {
@@ -508,7 +506,7 @@ func (c *Client) deletePost(filePath string) error {
 	return os.Remove(filePath)
 }
 
-func (c *Client) DeletePost(postID int) error {
+func (c *Client) DeletePost(ctx context.Context, postID int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -523,7 +521,7 @@ func (c *Client) clear(dirPath string) error {
 	return os.RemoveAll(dirPath)
 }
 
-func (c *Client) Clear() error {
+func (c *Client) Clear(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

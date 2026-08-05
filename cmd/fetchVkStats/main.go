@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
+	"sync"
 
 	"arrai/config/appEnv"
 	"arrai/internal/provider"
@@ -15,7 +17,12 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
 	var err error
 
 	// Create appEnv
@@ -43,7 +50,7 @@ func main() {
 
 	// Create VK client
 	accessToken := appEnv.MustGet("VK_ACCESS_TOKEN")
-	client := vk.NewClient(ctx, logger, appEnv, accessToken)
+	client := vk.NewClient(wg, logger, appEnv, accessToken)
 
 	// Read author ID from user
 	fmt.Print("Enter author ID: ")
@@ -54,7 +61,7 @@ func main() {
 	// TODO: save to the real DB
 	var repo repository.Repository
 	if debugMode || desktopMode {
-		repo, err = disk.New(ctx, logger, appEnv, providerName, authorID)
+		repo, err = disk.New(logger, appEnv, providerName, authorID)
 		if err != nil {
 			logger.Error("failed to create repository",
 				"error", err,
@@ -73,25 +80,28 @@ func main() {
 	}
 
 	// Get posts using API
-	posts, err := client.GetPosts(authorID)
+	posts, err := client.GetPosts(ctx, authorID)
 	if err != nil {
 		logger.Error("failed to get posts",
 			"error", err,
 		)
 		return
 	} else {
-		logger.Debug("Author's posts fetched",
+		logger.Info("Posts fetched from VK API",
 			"author_id", authorID,
 			"posts_count", len(*posts),
-			"first_post_text", (*posts)[0].Text,
+		)
+
+		logger.Debug("First post",
+			"text", (*posts)[0].Text,
 		)
 	}
 
 	// Save posts to repository
 	if debugMode {
-		defer repo.Clear()
+		defer repo.Clear(ctx)
 
-		postID, err := repo.SavePost((*posts)[0])
+		postID, err := repo.SavePost(ctx, (*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -103,7 +113,7 @@ func main() {
 			"post_id", postID,
 		)
 
-		postIDs, err := repo.GetExistingPostIDs()
+		postIDs, err := repo.GetExistingPostIDs(ctx)
 		if err != nil {
 			logger.Error("failed to get existing post IDs from repository",
 				"error", err,
@@ -114,7 +124,7 @@ func main() {
 			"post_ids", postIDs,
 		)
 
-		post, err := repo.GetPost(postIDs[0])
+		post, err := repo.GetPost(ctx, postIDs[0])
 		if err != nil {
 			logger.Error("failed to get first post from repository",
 				"error", err,
@@ -129,6 +139,11 @@ func main() {
 		fmt.Print("Enter to clear debug repo: ")
 		scanner.Scan()
 	} else {
-		repo.SavePosts(*posts)
+		logger.Info("Saving posts to repository")
+		repo.SavePosts(ctx, *posts)
+		logger.Info("Posts are saved to repository")
+	}
+}
+
 	}
 }
