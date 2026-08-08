@@ -157,6 +157,7 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 	}
 
 	// Getting comments and photos for all posts
+	// Getting comments and attachments for all posts
 	for i := range posts {
 		comments, err := c.getComments(ctx, authorId, posts[i].ID)
 		if err != nil {
@@ -173,10 +174,16 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 
 		err = c.fillPhotos(ctx, &posts[i].Photos)
 		if err != nil {
+			if err == context.Canceled {
+				break
+			}
 			c.logger.Error("failed to get photos for post",
 				"post_id", posts[i].ID,
 				"error", err,
 			)
+			continue
+		}
+
 			if err == context.Canceled {
 				break
 			}
@@ -198,6 +205,7 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 }
 
 func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.PhotoWithPreview) error {
+func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.Photo) error {
 	for i := range *photos {
 		photo, err := c.downloadPhoto(ctx, (*photos)[i].Self.Url)
 		if err != nil {

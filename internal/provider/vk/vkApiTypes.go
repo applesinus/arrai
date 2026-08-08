@@ -66,6 +66,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 	creationTime := creationTimeOrDefault(p.CreatedAt)
 
 	photos := make([]domain.PhotoWithPreview, 0)
+	photos := make([]domain.Photo, 0)
 	if p.Attachments != nil {
 		for _, attachment := range p.Attachments {
 			if attachment.Type == nil {
@@ -76,6 +77,15 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 					continue
 				} else {
 					attachment.Photo.OrigPhoto.Url = &attachment.Photo.Sizes[len(attachment.Photo.Sizes)-1].Url
+
+			switch *attachment.Type {
+			case ATTACHMENT_PHOTO:
+				if attachment.Photo.OrigPhoto.Url == nil {
+					if attachment.Photo.Sizes == nil || len(attachment.Photo.Sizes) == 0 {
+						continue
+					} else {
+						attachment.Photo.OrigPhoto.Url = &attachment.Photo.Sizes[len(attachment.Photo.Sizes)-1].Url
+					}
 				}
 			}
 
@@ -93,9 +103,12 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 
 				photos = append(photos, domain.PhotoWithPreview{
 					Self: domain.Photo{
+				photos = append(photos, domain.Photo{
+					Self: domain.Picture{
 						Url: parseUrl(*attachment.Photo.OrigPhoto.Url),
 					},
 					Preview: domain.Photo{
+					Preview: domain.Picture{
 						Url: parseUrl(smallSizeUrl),
 					},
 				})
@@ -147,6 +160,7 @@ func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
 	creationTime := creationTimeOrDefault(c.CreatedAt)
 
 	photos := make([]domain.PhotoWithPreview, 0)
+	photos := make([]domain.Photo, 0)
 	for _, attachment := range c.Attachments {
 		if *attachment.Type == ATTACHMENT_PHOTO {
 			smallSizeUrl := ""
@@ -162,9 +176,12 @@ func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
 
 			photos = append(photos, domain.PhotoWithPreview{
 				Self: domain.Photo{
+			photos = append(photos, domain.Photo{
+				Self: domain.Picture{
 					Url: *attachment.Photo.OrigPhoto.Url,
 				},
 				Preview: domain.Photo{
+				Preview: domain.Picture{
 					Url: smallSizeUrl,
 				},
 			})
@@ -184,6 +201,8 @@ func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
 		Replies: nil,
 	}, nil
 }
+
+// Support functions
 
 func creationTimeOrDefault(creationTime *int) time.Time {
 	returnInt := domain.PLACEHOLDER_TIME

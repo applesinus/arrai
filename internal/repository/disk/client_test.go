@@ -52,7 +52,7 @@ func testSetup(t *testing.T) {
 	})
 }
 
-func createMockPhoto(t *testing.T, preffix string) domain.Photo {
+func createMockPhoto(t *testing.T, preffix string) domain.Picture {
 	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{1, 1}})
 	img.Set(0, 0, color.Black)
 
@@ -62,15 +62,15 @@ func createMockPhoto(t *testing.T, preffix string) domain.Photo {
 		t.Fatal(err)
 	}
 
-	return domain.Photo{
+	return domain.Picture{
 		Url:      fmt.Sprintf("%s_%s", preffix, photoUrl),
 		Filename: fmt.Sprintf("%s_%s", preffix, photoFilename),
 		Content:  buf.Bytes(),
 	}
 }
 
-func createMockPhotoWithPreview(t *testing.T, ID string) domain.PhotoWithPreview {
-	return domain.PhotoWithPreview{
+func createMockPhotoWithPreview(t *testing.T, ID string) domain.Photo {
+	return domain.Photo{
 		Self:    createMockPhoto(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
 		Preview: createMockPhoto(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
 	}
@@ -275,7 +275,7 @@ func TestSavePost(t *testing.T) {
 		IsAuthor:  true,
 		Reactions: 7,
 		Text:      "text",
-		Photos:    []domain.PhotoWithPreview{},
+		Photos:    []domain.Photo{},
 		Replies:   []domain.Comment{},
 	}
 	comment2 := domain.Comment{
@@ -285,7 +285,7 @@ func TestSavePost(t *testing.T) {
 		IsAuthor:  true,
 		Reactions: 9,
 		Text:      "text",
-		Photos:    []domain.PhotoWithPreview{},
+		Photos:    []domain.Photo{},
 		Replies:   []domain.Comment{},
 	}
 	commentWithOnePhoto := domain.Comment{
@@ -295,7 +295,7 @@ func TestSavePost(t *testing.T) {
 		IsAuthor:  true,
 		Reactions: 11,
 		Text:      "text",
-		Photos: []domain.PhotoWithPreview{
+		Photos: []domain.Photo{
 			photo1,
 		},
 		Replies: []domain.Comment{},
@@ -307,7 +307,7 @@ func TestSavePost(t *testing.T) {
 		IsAuthor:  true,
 		Reactions: 13,
 		Text:      "text",
-		Photos: []domain.PhotoWithPreview{
+		Photos: []domain.Photo{
 			photo1,
 			photo2,
 		},
@@ -320,7 +320,7 @@ func TestSavePost(t *testing.T) {
 		IsAuthor:  true,
 		Reactions: 15,
 		Text:      "text",
-		Photos:    []domain.PhotoWithPreview{},
+		Photos:    []domain.Photo{},
 		Replies:   []domain.Comment{comment1, comment2},
 	}
 
@@ -347,7 +347,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments:  []domain.Comment{},
 			},
 
@@ -366,7 +366,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos: []domain.PhotoWithPreview{
+				Photos: []domain.Photo{
 					photo1,
 				},
 				Comments: []domain.Comment{},
@@ -387,7 +387,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos: []domain.PhotoWithPreview{
+				Photos: []domain.Photo{
 					photo1,
 					photo2,
 				},
@@ -409,7 +409,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
 					comment1,
 				},
@@ -430,7 +430,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
 					comment1,
 					comment2,
@@ -452,7 +452,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
 					commentWithOnePhoto,
 				},
@@ -473,7 +473,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
 					commentWithManyPhotos,
 				},
@@ -494,7 +494,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
 					thread,
 				},
@@ -517,7 +517,7 @@ func TestSavePost(t *testing.T) {
 				Reactions: reactions,
 				Reposts:   reposts,
 				Text:      text,
-				Photos:    []domain.PhotoWithPreview{},
+				Photos:    []domain.Photo{},
 				Comments:  []domain.Comment{},
 			},
 

@@ -196,7 +196,7 @@ func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) 
 	return nil
 }
 
-func (c *Client) savePhoto(dirPath, filename string, photo domain.PhotoWithPreview) ([]string, error) {
+func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]string, error) {
 	filenames := make([]string, 2)
 
 	name := filename
@@ -222,7 +222,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.PhotoWithPrevi
 	return filenames, nil
 }
 
-func (c *Client) savePhotoEntry(dirPath, filename string, photo domain.Photo) error {
+func (c *Client) savePhotoEntry(dirPath, filename string, photo domain.Picture) error {
 	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, filename), os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
@@ -318,7 +318,7 @@ func (c *Client) fillCommentsPhotos(dirPath string, replies *[]domain.Comment) e
 	return nil
 }
 
-func (c *Client) readPhoto(dirPath string, photo *domain.PhotoWithPreview) error {
+func (c *Client) readPhoto(dirPath string, photo *domain.Photo) error {
 	c.logger.Debug("Reading Photos",
 		"dirPath", dirPath,
 		"bigFilename", photo.Self.Filename,
