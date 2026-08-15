@@ -28,7 +28,8 @@ type Client struct {
 	limiter     *rate.Limiter
 	httpClient  *http.Client
 
-	debugMode bool
+	debugMode         bool
+	maxPostsInRequest int
 }
 
 func NewClient(wg *sync.WaitGroup, logger *slog.Logger, appEnv *appEnv.AppEnv, accessToken string) provider.Provider {
@@ -38,10 +39,11 @@ func NewClient(wg *sync.WaitGroup, logger *slog.Logger, appEnv *appEnv.AppEnv, a
 		env:    appEnv,
 
 		accessToken: accessToken,
-		limiter:     rate.NewLimiter(rate.Limit(appEnv.GetIntOrDefault("VK_MAX_RPS", 3)), 1),
+		limiter:     rate.NewLimiter(rate.Limit(appEnv.GetIntOrDefault("VK_MAX_RPS", 1)), 1),
 		httpClient:  http.DefaultClient,
 
-		debugMode: appEnv.GetBoolOrDefault("DEBUG_MODE", false),
+		debugMode:         appEnv.GetBoolOrDefault("DEBUG_MODE", false),
+		maxPostsInRequest: appEnv.GetIntOrDefault("VK_MAX_POSTS_IN_REQUEST", 1),
 	}
 
 	return provider.Provider(client)
@@ -116,10 +118,10 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 	// Getting all posts
 	posts := make([]domain.Post, 0)
 
-	for offset := 0; ; offset += 100 {
+	for offset := 0; ; offset += c.maxPostsInRequest {
 		resp, err := c.doVkApiRequest(ctx, METHOD_GET_WALL, map[string]any{
 			"domain": authorID,
-			"count":  100,
+			"count":  c.maxPostsInRequest,
 			"offset": offset,
 		})
 		if err != nil {
