@@ -7,7 +7,7 @@ import (
 const (
 	BASE_PATH_ENV_KEY = "DISK_REPO_BASE_PATH"
 
-	PHOTO_SMALL_PREFIX = "small_"
+	PREVIEW_PREFIX = "preview_"
 )
 
 var (

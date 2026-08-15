@@ -146,7 +146,12 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 		}
 
 		for j, video := range post.Videos {
-			videoFilename, previewFilename, err := c.saveVideo(fmt.Sprintf("%s/%d", dirPath, post.ID), fmt.Sprintf("%d.mp4", j), fmt.Sprintf("%d_preview.jpg", j), video)
+			videoFilename, previewFilename, err := c.saveVideo(
+				fmt.Sprintf("%s/%d", dirPath, post.ID),
+				fmt.Sprintf("%d.mp4", j),
+				fmt.Sprintf("%sv%d.jpg", repository.PREVIEW_PREFIX, j),
+				video,
+			)
 			if err != nil {
 				if videoFilename == "" {
 					return -1, err
@@ -199,7 +204,7 @@ func (c *Client) saveCommentsAttachments(dirPath string, comments *[]domain.Comm
 			}
 
 			for j, photo := range comment.Photos {
-				photoFilenames, err := c.savePhoto(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("%d.jpg", j), photo)
+				photoFilenames, err := c.savePhoto(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("p%d.jpg", j), photo)
 				if err != nil {
 					return err
 				}
@@ -219,7 +224,12 @@ func (c *Client) saveCommentsAttachments(dirPath string, comments *[]domain.Comm
 			}
 
 			for j, video := range comment.Videos {
-				videoFilename, previewFilename, err := c.saveVideo(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("%d.mp4", j), fmt.Sprintf("%d_preview.jpg", j), video)
+				videoFilename, previewFilename, err := c.saveVideo(
+					fmt.Sprintf("%s/%d", dirPath, comment.ID),
+					fmt.Sprintf("v%d.mp4", j),
+					fmt.Sprintf("%sv%d.jpg", repository.PREVIEW_PREFIX, j),
+					video,
+				)
 				if err != nil {
 					if videoFilename == "" {
 						return err
@@ -291,7 +301,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]stri
 	}
 	filenames[0] = name
 
-	name = fmt.Sprintf("%s%s", repository.PHOTO_SMALL_PREFIX, filename)
+	name = fmt.Sprintf("%s%s", repository.PREVIEW_PREFIX, filename)
 	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
 		return nil, repository.ERR_PHOTO_EXISTS
 	}
