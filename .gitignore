@@ -5,3 +5,7 @@ diskRepo/
 
 # temp files e.g. for testing
 temp/
+
+# third-party bins
+third_party/bin/*
+!third_party/bin/.gitkeep

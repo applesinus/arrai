@@ -23,6 +23,7 @@ type Post struct {
 	Text      string    `json:"text"`
 
 	Photos []Photo `json:"photos"`
+	Videos []Video `json:"videos"`
 
 	Comments []Comment `json:"comments"`
 }
@@ -35,6 +36,7 @@ type Comment struct {
 	Reactions int       `json:"reactions"`
 	Text      string    `json:"text"`
 	Photos    []Photo   `json:"photos"`
+	Videos    []Video   `json:"videos"`
 	Replies   []Comment `json:"replies"`
 }
 
@@ -50,4 +52,15 @@ type Picture struct {
 	Content []byte `json:"content"`
 }
 
+type Video struct {
+	Url      string `json:"url"`
+	Filename string `json:"filename"`
+
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Preview     Picture `json:"preview"`
+	// TODO generation summary via V2T API interface
+	// Summary string `json:"summary"`
+
+	Content []byte `json:"content"`
 }

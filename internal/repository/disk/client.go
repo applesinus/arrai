@@ -139,7 +139,34 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 		}
 	}
 
-	err := c.saveCommentsPhotos(photoDirPath, &post.Comments)
+	if len(post.Videos) > 0 {
+		err := c.createDirIfNotExist(dirPath, post.ID)
+		if err != nil {
+			return -1, err
+		}
+
+		for j, video := range post.Videos {
+			videoFilename, previewFilename, err := c.saveVideo(fmt.Sprintf("%s/%d", dirPath, post.ID), fmt.Sprintf("%d.mp4", j), fmt.Sprintf("%d_preview.jpg", j), video)
+			if err != nil {
+				if videoFilename == "" {
+					return -1, err
+				}
+				c.logger.Error("Failed to save preview for video",
+					"post_id", post.ID,
+					"video", videoFilename,
+					"error", err,
+				)
+			}
+
+			post.Videos[j].Filename = videoFilename
+			post.Videos[j].Content = []byte{}
+
+			post.Videos[j].Preview.Filename = previewFilename
+			post.Videos[j].Preview.Content = []byte{}
+		}
+	}
+
+	err := c.saveCommentsAttachments(photoDirPath, &post.Comments)
 	if err != nil {
 		return -1, err
 	}
@@ -163,14 +190,12 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, erro
 	return post.ID, nil
 }
 
-func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) error {
+func (c *Client) saveCommentsAttachments(dirPath string, comments *[]domain.Comment) error {
 	for i, comment := range *comments {
 		if len(comment.Photos) > 0 {
-			if !c.isPathExist(fmt.Sprintf("%s/%d", dirPath, comment.ID)) {
-				err := os.MkdirAll(fmt.Sprintf("%s/%d", dirPath, comment.ID), 0755)
-				if err != nil {
-					return err
-				}
+			err := c.createDirIfNotExist(dirPath, comment.ID)
+			if err != nil {
+				return err
 			}
 
 			for j, photo := range comment.Photos {
@@ -187,13 +212,70 @@ func (c *Client) saveCommentsPhotos(dirPath string, comments *[]domain.Comment) 
 			}
 		}
 
-		err := c.saveCommentsPhotos(dirPath, &(*comments)[i].Replies)
+		if len(comment.Videos) > 0 {
+			err := c.createDirIfNotExist(dirPath, comment.ID)
+			if err != nil {
+				return err
+			}
+
+			for j, video := range comment.Videos {
+				videoFilename, previewFilename, err := c.saveVideo(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("%d.mp4", j), fmt.Sprintf("%d_preview.jpg", j), video)
+				if err != nil {
+					if videoFilename == "" {
+						return err
+					}
+					c.logger.Error("Failed to save preview for video",
+						"comment_id", comment.ID,
+						"video", videoFilename,
+						"error", err,
+					)
+				}
+
+				comment.Videos[j].Filename = videoFilename
+				comment.Videos[j].Content = []byte{}
+
+				comment.Videos[j].Preview.Filename = previewFilename
+				comment.Videos[j].Preview.Content = []byte{}
+			}
+		}
+
+		err := c.saveCommentsAttachments(dirPath, &(*comments)[i].Replies)
 		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (c *Client) createDirIfNotExist(parentPath string, dirName any) error {
+	if !c.isPathExist(fmt.Sprintf("%s/%v", parentPath, dirName)) {
+		err := os.MkdirAll(fmt.Sprintf("%s/%v", parentPath, dirName), 0755)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) saveVideo(dirPath, videoFilename string, previewFilename string, video domain.Video) (string, string, error) {
+	// saving video itself
+	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, videoFilename), os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return "", "", err
+	}
+	defer file.Close()
+
+	file.Write(video.Content)
+
+	// saving preview
+	err = c.savePicture(dirPath, previewFilename, video.Preview)
+	if err != nil {
+		return videoFilename, "", err
+	}
+
+	return videoFilename, previewFilename, nil
 }
 
 func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]string, error) {
@@ -203,7 +285,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]stri
 	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
 		return nil, repository.ERR_PHOTO_EXISTS
 	}
-	err := c.savePhotoEntry(dirPath, name, photo.Self)
+	err := c.savePicture(dirPath, name, photo.Self)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +295,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]stri
 	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
 		return nil, repository.ERR_PHOTO_EXISTS
 	}
-	err = c.savePhotoEntry(dirPath, name, photo.Preview)
+	err = c.savePicture(dirPath, name, photo.Preview)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +304,7 @@ func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]stri
 	return filenames, nil
 }
 
-func (c *Client) savePhotoEntry(dirPath, filename string, photo domain.Picture) error {
+func (c *Client) savePicture(dirPath, filename string, photo domain.Picture) error {
 	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, filename), os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
@@ -283,7 +365,16 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 
 	if len(post.Photos) > 0 {
 		for i := range post.Photos {
-			err := c.readPhoto(photoDirPath, &post.Photos[i])
+			err := c.getPhoto(photoDirPath, &post.Photos[i])
+			if err != nil {
+				return post, err
+			}
+		}
+	}
+
+	if len(post.Videos) > 0 {
+		for i := range post.Videos {
+			err := c.getVideo(photoDirPath, &post.Videos[i])
 			if err != nil {
 				return post, err
 			}
@@ -291,7 +382,7 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 	}
 
 	if len(post.Comments) > 0 {
-		err = c.fillCommentsPhotos(photoDirPath, &post.Comments)
+		err = c.fillCommentsAttachments(photoDirPath, &post.Comments)
 		if err != nil {
 			return post, err
 		}
@@ -300,16 +391,23 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 	return post, err
 }
 
-func (c *Client) fillCommentsPhotos(dirPath string, replies *[]domain.Comment) error {
+func (c *Client) fillCommentsAttachments(dirPath string, replies *[]domain.Comment) error {
 	for i := range *replies {
 		for j := range (*replies)[i].Photos {
-			err := c.readPhoto(dirPath, &(*replies)[i].Photos[j])
+			err := c.getPhoto(dirPath, &(*replies)[i].Photos[j])
 			if err != nil {
 				return err
 			}
 		}
 
-		err := c.fillCommentsPhotos(dirPath, &(*replies)[i].Replies)
+		for j := range (*replies)[i].Videos {
+			err := c.getVideo(dirPath, &(*replies)[i].Videos[j])
+			if err != nil {
+				return err
+			}
+		}
+
+		err := c.fillCommentsAttachments(dirPath, &(*replies)[i].Replies)
 		if err != nil {
 			return err
 		}
@@ -318,20 +416,42 @@ func (c *Client) fillCommentsPhotos(dirPath string, replies *[]domain.Comment) e
 	return nil
 }
 
-func (c *Client) readPhoto(dirPath string, photo *domain.Photo) error {
+func (c *Client) getVideo(dirPath string, video *domain.Video) error {
+	c.logger.Debug("Reading Videos",
+		"directory_path", dirPath,
+		"video_filename", video.Filename,
+		"preview_filename", video.Preview.Filename,
+	)
+
+	videoFile, err := c.readFile(dirPath, video.Filename)
+	if err != nil {
+		return err
+	}
+	video.Content = videoFile
+
+	previewFile, err := c.readFile(dirPath, video.Preview.Filename)
+	if err != nil {
+		return err
+	}
+	video.Preview.Content = previewFile
+
+	return nil
+}
+
+func (c *Client) getPhoto(dirPath string, photo *domain.Photo) error {
 	c.logger.Debug("Reading Photos",
 		"dirPath", dirPath,
 		"bigFilename", photo.Self.Filename,
 		"smallFilename", photo.Preview.Filename,
 	)
 
-	bigPhoto, err := c.getPhotoEntry(dirPath, photo.Self.Filename)
+	bigPhoto, err := c.readFile(dirPath, photo.Self.Filename)
 	if err != nil {
 		return err
 	}
 	photo.Self.Content = bigPhoto
 
-	smallPhoto, err := c.getPhotoEntry(dirPath, photo.Preview.Filename)
+	smallPhoto, err := c.readFile(dirPath, photo.Preview.Filename)
 	if err != nil {
 		return err
 	}
@@ -340,7 +460,7 @@ func (c *Client) readPhoto(dirPath string, photo *domain.Photo) error {
 	return nil
 }
 
-func (c *Client) getPhotoEntry(dirPath, filename string) ([]byte, error) {
+func (c *Client) readFile(dirPath, filename string) ([]byte, error) {
 	if !c.isPathExist(fmt.Sprintf("%s/%s", dirPath, filename)) {
 		return nil, repository.ERR_PHOTO_NOT_FOUND
 	}

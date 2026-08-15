@@ -1,12 +1,14 @@
 package vk
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 
@@ -135,7 +137,7 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 		}
 
 		for _, post := range response.Response.Items {
-			newPost, err := post.toDomain()
+			newPost, err := post.toDomain(*c.logger)
 			if err != nil {
 				return nil, err
 			}
@@ -156,7 +158,6 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 		)
 	}
 
-	// Getting comments and photos for all posts
 	// Getting comments and attachments for all posts
 	for i := range posts {
 		comments, err := c.getComments(ctx, authorId, posts[i].ID)
@@ -184,9 +185,15 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 			continue
 		}
 
+		err = c.fillVideos(ctx, &posts[i].Videos)
+		if err != nil {
 			if err == context.Canceled {
 				break
 			}
+			c.logger.Error("failed to get videos for post",
+				"post_id", posts[i].ID,
+				"error", err,
+			)
 			continue
 		}
 
@@ -204,7 +211,6 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 	return &posts, nil
 }
 
-func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.PhotoWithPreview) error {
 func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.Photo) error {
 	for i := range *photos {
 		photo, err := c.downloadPhoto(ctx, (*photos)[i].Self.Url)
@@ -248,6 +254,74 @@ func (c *Client) downloadPhoto(ctx context.Context, url string) ([]byte, error) 
 	return io.ReadAll(resp.Body)
 }
 
+func (c *Client) fillVideos(ctx context.Context, videos *[]domain.Video) error {
+	for i := range *videos {
+		video, err := c.downloadVideo(ctx, (*videos)[i].Url)
+		if err != nil {
+			return err
+		}
+		if video == nil || len(video) == 0 {
+			continue
+		}
+
+		(*videos)[i].Content = video
+
+		preview, err := c.downloadPhoto(ctx, (*videos)[i].Preview.Url)
+		if err != nil {
+			preview, err = c.getFitstFrameFromVideo(ctx, video)
+			if err != nil {
+				return err
+			}
+			if len(preview) == 0 {
+				preview = nil
+			}
+		}
+
+		(*videos)[i].Preview.Content = preview
+	}
+
+	return nil
+}
+
+func (c *Client) downloadVideo(ctx context.Context, url string) ([]byte, error) {
+	c.limiter.Wait(ctx)
+
+	cmd := exec.CommandContext(ctx, "./third_party/bin/yt-dlp",
+		"-o", "-",
+		"--quiet",
+		"--no-warnings",
+		url,
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	data, err := io.ReadAll(stdout)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Wait(); err != nil {
+		return nil, fmt.Errorf("yt-dlp failed: %v (stderr: %s)", err, stderr.String())
+	}
+
+	return data, nil
+}
+
+func (c *Client) getFitstFrameFromVideo(ctx context.Context, video []byte) ([]byte, error) {
+	// TODO
+	return nil, nil
+}
+
 func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]domain.Comment, error) {
 	comments := make([]domain.Comment, 0)
 
@@ -284,6 +358,16 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 				err = c.fillPhotos(ctx, &comments[len(comments)-1].Photos)
 				if err != nil {
 					c.logger.Error("failed to get photos for comment",
+						"comment_id", comments[len(comments)-1].ID,
+						"error", err,
+					)
+				}
+			}
+
+			if len(comments[len(comments)-1].Videos) > 0 {
+				err = c.fillVideos(ctx, &comments[len(comments)-1].Videos)
+				if err != nil {
+					c.logger.Error("failed to get videos for comment",
 						"comment_id", comments[len(comments)-1].ID,
 						"error", err,
 					)

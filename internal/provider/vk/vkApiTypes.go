@@ -3,6 +3,7 @@ package vk
 import (
 	"arrai/internal/domain"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -17,6 +18,16 @@ type Attachment struct {
 			Url *string `json:"url"`
 		} `json:"orig_photo"`
 	} `json:"photo"`
+	Video struct {
+		Id          int    `json:"id"`
+		OwnerId     int    `json:"owner_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Image       []struct {
+			Height int    `json:"height"`
+			Url    string `json:"url"`
+		} `json:"image"`
+	}
 }
 
 type vkWallPost struct {
@@ -51,7 +62,7 @@ type vkWallPost struct {
 	Attachments []Attachment `json:"attachments"`
 }
 
-func (p vkWallPost) toDomain() (domain.Post, error) {
+func (p vkWallPost) toDomain(logger slog.Logger) (domain.Post, error) {
 	if p.ID == nil {
 		return domain.Post{}, domain.ERROR_NO_POST_ID
 	}
@@ -65,18 +76,17 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 
 	creationTime := creationTimeOrDefault(p.CreatedAt)
 
-	photos := make([]domain.PhotoWithPreview, 0)
 	photos := make([]domain.Photo, 0)
+	videos := make([]domain.Video, 0)
 	if p.Attachments != nil {
 		for _, attachment := range p.Attachments {
 			if attachment.Type == nil {
+				logger.Warn("No attachment type",
+					"post_id", *p.ID,
+					"attachment", attachment,
+				)
 				continue
 			}
-			if attachment.Photo.OrigPhoto.Url == nil {
-				if attachment.Photo.Sizes == nil || len(attachment.Photo.Sizes) == 0 {
-					continue
-				} else {
-					attachment.Photo.OrigPhoto.Url = &attachment.Photo.Sizes[len(attachment.Photo.Sizes)-1].Url
 
 			switch *attachment.Type {
 			case ATTACHMENT_PHOTO:
@@ -87,9 +97,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 						attachment.Photo.OrigPhoto.Url = &attachment.Photo.Sizes[len(attachment.Photo.Sizes)-1].Url
 					}
 				}
-			}
 
-			if *attachment.Type == ATTACHMENT_PHOTO {
 				smallSizeUrl := ""
 
 				switch len(attachment.Photo.Sizes) {
@@ -101,15 +109,31 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 					smallSizeUrl = attachment.Photo.Sizes[1].Url
 				}
 
-				photos = append(photos, domain.PhotoWithPreview{
-					Self: domain.Photo{
 				photos = append(photos, domain.Photo{
 					Self: domain.Picture{
 						Url: parseUrl(*attachment.Photo.OrigPhoto.Url),
 					},
-					Preview: domain.Photo{
 					Preview: domain.Picture{
 						Url: parseUrl(smallSizeUrl),
+					},
+				})
+
+			case ATTACHMENT_VIDEO:
+				imgMaxHeight := 0
+				previewUrl := ""
+				for _, img := range attachment.Video.Image {
+					if img.Height > imgMaxHeight {
+						imgMaxHeight = img.Height
+						previewUrl = img.Url
+					}
+				}
+
+				videos = append(videos, domain.Video{
+					Url:         fmt.Sprintf("https://vk.com/clip%d_%d", attachment.Video.OwnerId, attachment.Video.Id),
+					Title:       attachment.Video.Title,
+					Description: attachment.Video.Description,
+					Preview: domain.Picture{
+						Url: parseUrl(previewUrl),
 					},
 				})
 			}
@@ -125,6 +149,7 @@ func (p vkWallPost) toDomain() (domain.Post, error) {
 		Reposts:   p.Reposts.Count,
 		Text:      *p.Text,
 		Photos:    photos,
+		Videos:    videos,
 		Comments:  nil,
 	}
 
@@ -159,7 +184,6 @@ func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
 
 	creationTime := creationTimeOrDefault(c.CreatedAt)
 
-	photos := make([]domain.PhotoWithPreview, 0)
 	photos := make([]domain.Photo, 0)
 	for _, attachment := range c.Attachments {
 		if *attachment.Type == ATTACHMENT_PHOTO {
@@ -174,13 +198,10 @@ func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
 				smallSizeUrl = attachment.Photo.Sizes[1].Url
 			}
 
-			photos = append(photos, domain.PhotoWithPreview{
-				Self: domain.Photo{
 			photos = append(photos, domain.Photo{
 				Self: domain.Picture{
 					Url: *attachment.Photo.OrigPhoto.Url,
 				},
-				Preview: domain.Photo{
 				Preview: domain.Picture{
 					Url: smallSizeUrl,
 				},

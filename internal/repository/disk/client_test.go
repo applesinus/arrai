@@ -52,7 +52,7 @@ func testSetup(t *testing.T) {
 	})
 }
 
-func createMockPhoto(t *testing.T, preffix string) domain.Picture {
+func createMockPicture(t *testing.T, preffix string) domain.Picture {
 	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{1, 1}})
 	img.Set(0, 0, color.Black)
 
@@ -69,10 +69,23 @@ func createMockPhoto(t *testing.T, preffix string) domain.Picture {
 	}
 }
 
-func createMockPhotoWithPreview(t *testing.T, ID string) domain.Photo {
+func createMockPhoto(t *testing.T, ID string) domain.Photo {
 	return domain.Photo{
-		Self:    createMockPhoto(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
-		Preview: createMockPhoto(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
+		Self:    createMockPicture(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
+		Preview: createMockPicture(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
+	}
+}
+
+func createMockVideo(t *testing.T, ID string) domain.Video {
+	return domain.Video{
+		Url:      fmt.Sprintf("%s_%s", photoUrl, ID),
+		Filename: fmt.Sprintf("%s_%s", photoFilename, ID),
+
+		Title:       fmt.Sprintf("title_%s", ID),
+		Description: fmt.Sprintf("description_%s", ID),
+		Preview:     createMockPicture(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
+
+		Content: []byte("AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAsxtZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMjc0OCA5N2VhZWYyIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNiAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD00IHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAPZYiEACv//vXb8yyubp//AAAC7W1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAoAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAQAAAAEAAAAAAAJGVkdHMAAAAcZWxzdAAAAAAAAAABAAAAKAAAAAAAAQAAAAABj21kaWEAAAAgbWRoZAAAAAAAAAAAAAAAAAAAMgAAAAIAVcQAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAATptaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAD6c3RibAAAAJZzdHNkAAAAAAAAAAEAAACGYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAQABAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADBhdmNDAfQACv/hABdn9AAKkZsr02QAAAMABAAAAwDIPEiWWAEABmjr48RIRAAAABhzdHRzAAAAAAAAAAEAAAABAAACAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAALEAAAAAQAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ny41Ni4xMDE="),
 	}
 }
 
@@ -266,8 +279,10 @@ func TestSavePost(t *testing.T) {
 	reactions := 4
 	reposts := 5
 	text := "text"
-	photo1 := createMockPhotoWithPreview(t, "1")
-	photo2 := createMockPhotoWithPreview(t, "2")
+	photo1 := createMockPhoto(t, "1")
+	photo2 := createMockPhoto(t, "2")
+	video1 := createMockVideo(t, "3")
+	video2 := createMockVideo(t, "4")
 	comment1 := domain.Comment{
 		ID:        6,
 		CreatedAt: time.Now().Truncate(0),
@@ -276,6 +291,7 @@ func TestSavePost(t *testing.T) {
 		Reactions: 7,
 		Text:      "text",
 		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
 		Replies:   []domain.Comment{},
 	}
 	comment2 := domain.Comment{
@@ -286,9 +302,10 @@ func TestSavePost(t *testing.T) {
 		Reactions: 9,
 		Text:      "text",
 		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
 		Replies:   []domain.Comment{},
 	}
-	commentWithOnePhoto := domain.Comment{
+	commentWithOneEveryAttachment := domain.Comment{
 		ID:        10,
 		CreatedAt: time.Now().Truncate(0),
 		User:      "user",
@@ -298,9 +315,12 @@ func TestSavePost(t *testing.T) {
 		Photos: []domain.Photo{
 			photo1,
 		},
+		Videos: []domain.Video{
+			video1,
+		},
 		Replies: []domain.Comment{},
 	}
-	commentWithManyPhotos := domain.Comment{
+	commentWithManyEveryAttachment := domain.Comment{
 		ID:        12,
 		CreatedAt: time.Now().Truncate(0),
 		User:      "user",
@@ -310,6 +330,10 @@ func TestSavePost(t *testing.T) {
 		Photos: []domain.Photo{
 			photo1,
 			photo2,
+		},
+		Videos: []domain.Video{
+			video1,
+			video2,
 		},
 		Replies: []domain.Comment{},
 	}
@@ -321,7 +345,8 @@ func TestSavePost(t *testing.T) {
 		Reactions: 15,
 		Text:      "text",
 		Photos:    []domain.Photo{},
-		Replies:   []domain.Comment{comment1, comment2},
+		Videos:    []domain.Video{},
+		Replies:   []domain.Comment{comment1, comment2, commentWithOneEveryAttachment, commentWithManyEveryAttachment},
 	}
 
 	// Test cases
@@ -348,6 +373,7 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments:  []domain.Comment{},
 			},
 
@@ -375,6 +401,28 @@ func TestSavePost(t *testing.T) {
 			expectedInt: ID,
 			expextedErr: nil,
 		},
+		"postWithOneVideoSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        ID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos: []domain.Video{
+					video1,
+				},
+				Comments: []domain.Comment{},
+			},
+
+			expectedInt: ID,
+			expextedErr: nil,
+		},
 		"postWithManyPhotosSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
@@ -390,6 +438,30 @@ func TestSavePost(t *testing.T) {
 				Photos: []domain.Photo{
 					photo1,
 					photo2,
+				},
+				Videos:   []domain.Video{},
+				Comments: []domain.Comment{},
+			},
+
+			expectedInt: ID,
+			expextedErr: nil,
+		},
+		"postWithManyVideoSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        ID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos: []domain.Video{
+					video1,
+					video2,
 				},
 				Comments: []domain.Comment{},
 			},
@@ -410,6 +482,7 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments: []domain.Comment{
 					comment1,
 				},
@@ -431,6 +504,7 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments: []domain.Comment{
 					comment1,
 					comment2,
@@ -440,7 +514,7 @@ func TestSavePost(t *testing.T) {
 			expectedInt: ID,
 			expextedErr: nil,
 		},
-		"postWithPhotoInComment": {
+		"postWithOneEveryAttachmentInComment": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -454,14 +528,14 @@ func TestSavePost(t *testing.T) {
 				Text:      text,
 				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
-					commentWithOnePhoto,
+					commentWithOneEveryAttachment,
 				},
 			},
 
 			expectedInt: ID,
 			expextedErr: nil,
 		},
-		"postWithNamyPhotosInComment": {
+		"postWithNamyEveryAttachmentInComment": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -475,7 +549,7 @@ func TestSavePost(t *testing.T) {
 				Text:      text,
 				Photos:    []domain.Photo{},
 				Comments: []domain.Comment{
-					commentWithManyPhotos,
+					commentWithManyEveryAttachment,
 				},
 			},
 
