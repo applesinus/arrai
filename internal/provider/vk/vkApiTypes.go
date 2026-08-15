@@ -75,14 +75,92 @@ func (p vkWallPost) toDomain(logger slog.Logger) (domain.Post, error) {
 	}
 
 	creationTime := creationTimeOrDefault(p.CreatedAt)
+	photos, videos := parseAttachments(logger, p.Attachments, *p.ID)
 
+	post := domain.Post{
+		ID:        *p.ID,
+		OwnerID:   *p.OwnerID,
+		CreatedAt: creationTime,
+		Views:     p.Views.Count,
+		Reactions: p.Reactions.Count,
+		Reposts:   p.Reposts.Count,
+		Text:      *p.Text,
+		Photos:    photos,
+		Videos:    videos,
+		Comments:  nil,
+	}
+
+	return post, nil
+}
+
+type vkComment struct {
+	// Base
+	ID *int `json:"id"`
+
+	// CreatedAt
+	CreatedAt *int `json:"date"`
+
+	// Text
+	User *int `json:"from_id"`
+
+	Text  *string `json:"text"`
+	Likes struct {
+		Count *int `json:"count"`
+	} `json:"likes"`
+
+	Attachments []Attachment `json:"attachments"`
+	Thread      struct {
+		Count *int `json:"count"`
+	} `json:"thread"`
+}
+
+func (c vkComment) toDomain(logger slog.Logger, wallAuthorID int) (domain.Comment, error) {
+	if c.ID == nil {
+		return domain.Comment{}, domain.ERROR_NO_COMMENT_ID
+	}
+
+	creationTime := creationTimeOrDefault(c.CreatedAt)
+	photos, videos := parseAttachments(logger, c.Attachments, *c.ID)
+
+	return domain.Comment{
+		ID:        *c.ID,
+		CreatedAt: creationTime,
+
+		User:      fmt.Sprintf("%d", c.User),
+		IsAuthor:  *c.User == wallAuthorID,
+		Reactions: *c.Likes.Count,
+
+		Text:    *c.Text,
+		Photos:  photos,
+		Videos:  videos,
+		Replies: nil,
+	}, nil
+}
+
+// Support functions
+
+func creationTimeOrDefault(creationTime *int) time.Time {
+	returnInt := domain.PLACEHOLDER_TIME
+	if creationTime != nil {
+		returnInt = *creationTime
+	}
+
+	return time.Unix(int64(returnInt), 0).Truncate(0)
+}
+
+func parseUrl(url string) string {
+	return strings.ReplaceAll(url, "\\u0026", "&")
+}
+
+func parseAttachments(logger slog.Logger, attachments []Attachment, parentID int) ([]domain.Photo, []domain.Video) {
 	photos := make([]domain.Photo, 0)
 	videos := make([]domain.Video, 0)
-	if p.Attachments != nil {
-		for _, attachment := range p.Attachments {
+
+	if attachments != nil && len(attachments) != 0 {
+		for _, attachment := range attachments {
 			if attachment.Type == nil {
-				logger.Warn("No attachment type",
-					"post_id", *p.ID,
+				logger.Error("No attachment type",
+					"parent_id", parentID,
 					"attachment", attachment,
 				)
 				continue
@@ -136,104 +214,15 @@ func (p vkWallPost) toDomain(logger slog.Logger) (domain.Post, error) {
 						Url: parseUrl(previewUrl),
 					},
 				})
-			}
-		}
-	}
 
-	post := domain.Post{
-		ID:        *p.ID,
-		OwnerID:   *p.OwnerID,
-		CreatedAt: creationTime,
-		Views:     p.Views.Count,
-		Reactions: p.Reactions.Count,
-		Reposts:   p.Reposts.Count,
-		Text:      *p.Text,
-		Photos:    photos,
-		Videos:    videos,
-		Comments:  nil,
-	}
-
-	return post, nil
-}
-
-type vkComment struct {
-	// Base
-	ID *int `json:"id"`
-
-	// CreatedAt
-	CreatedAt *int `json:"date"`
-
-	// Text
-	User *int `json:"from_id"`
-
-	Text  *string `json:"text"`
-	Likes struct {
-		Count *int `json:"count"`
-	} `json:"likes"`
-
-	Attachments []Attachment `json:"attachments"`
-	Thread      struct {
-		Count *int `json:"count"`
-	} `json:"thread"`
-}
-
-func (c vkComment) toDomain(wallAuthorID int) (domain.Comment, error) {
-	if c.ID == nil {
-		return domain.Comment{}, domain.ERROR_NO_COMMENT_ID
-	}
-
-	creationTime := creationTimeOrDefault(c.CreatedAt)
-
-	photos := make([]domain.Photo, 0)
-	for _, attachment := range c.Attachments {
-		if *attachment.Type == ATTACHMENT_PHOTO {
-			smallSizeUrl := ""
-
-			switch len(attachment.Photo.Sizes) {
-			case 0:
-				smallSizeUrl = *attachment.Photo.OrigPhoto.Url
-			case 1:
-				smallSizeUrl = attachment.Photo.Sizes[0].Url
 			default:
-				smallSizeUrl = attachment.Photo.Sizes[1].Url
+				logger.Error("Unsupported attachment type",
+					"parent_id", parentID,
+					"attachment", attachment,
+				)
 			}
-
-			photos = append(photos, domain.Photo{
-				Self: domain.Picture{
-					Url: *attachment.Photo.OrigPhoto.Url,
-				},
-				Preview: domain.Picture{
-					Url: smallSizeUrl,
-				},
-			})
 		}
 	}
 
-	return domain.Comment{
-		ID:        *c.ID,
-		CreatedAt: creationTime,
-
-		User:      fmt.Sprintf("%d", c.User),
-		IsAuthor:  *c.User == wallAuthorID,
-		Reactions: *c.Likes.Count,
-
-		Text:    *c.Text,
-		Photos:  photos,
-		Replies: nil,
-	}, nil
-}
-
-// Support functions
-
-func creationTimeOrDefault(creationTime *int) time.Time {
-	returnInt := domain.PLACEHOLDER_TIME
-	if creationTime != nil {
-		returnInt = *creationTime
-	}
-
-	return time.Unix(int64(returnInt), 0).Truncate(0)
-}
-
-func parseUrl(url string) string {
-	return strings.ReplaceAll(url, "\\u0026", "&")
+	return photos, videos
 }

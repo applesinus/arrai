@@ -348,7 +348,7 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 		}
 
 		for _, comment := range response.Response.Items {
-			newComment, err := comment.toDomain(authorID)
+			newComment, err := comment.toDomain(*c.logger, authorID)
 			if err != nil {
 				return nil, err
 			}
@@ -417,7 +417,7 @@ func (c *Client) fillReplies(ctx context.Context, authorID, postID int, comment 
 		}
 
 		for _, reply := range response.Response.Items {
-			newReply, err := reply.toDomain(authorID)
+			newReply, err := reply.toDomain(*c.logger, authorID)
 			if err != nil {
 				return err
 			}
