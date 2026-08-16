@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,8 +22,11 @@ import (
 )
 
 var (
-	ERR_PATH_INVALID = errors.New("invalid path")
-	ERR_PATH_UNSAFE  = errors.New("unsafe path")
+	ERR_PATH_INVALID                  = errors.New("invalid path")
+	ERR_PATH_UNSAFE                   = errors.New("unsafe path")
+	ERR_UNKNOWN_TYPE_WITH_ATTACHMENTS = errors.New("unknown type with attachments")
+
+	ERR_NO_ENTITIES_GIVEN = errors.New("no entities given")
 )
 
 type Client struct {
@@ -36,6 +40,8 @@ type Client struct {
 	providerName string
 }
 
+// Current version of DiskRepo does not support multi-threaded access
+// TODO
 func New(logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, authorID string) (repository.Repository, error) {
 	if providerName == "" {
 		return nil, repository.ERR_EMPTY_PROVIDER
@@ -105,175 +111,207 @@ func New(logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, author
 	return repository.Repository(diskRepo), nil
 }
 
+// Interface for entities with attachments e.g. posts, comments
+type haveAttachments interface {
+	domain.Post | domain.Comment
+}
+
 // SAVE
 
-func (c *Client) savePost(dirPath, filePath string, post domain.Post) (int, error) {
-	if c.isPathExist(filePath) {
-		return -1, repository.ERR_POST_EXISTS
-	}
-	if post.ID == -1 {
-		return -1, domain.ERROR_NO_POST_ID
-	}
+// SavePost saves one post
+func (c *Client) SavePost(ctx context.Context, post domain.Post) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	photoDirPath := fmt.Sprintf("%s/%d", dirPath, post.ID)
+	return c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
+}
 
-	if len(post.Photos) > 0 {
-		if !c.isPathExist(photoDirPath) {
-			err := os.MkdirAll(photoDirPath, 0755)
-			if err != nil {
-				return -1, err
-			}
-		}
+// SavePosts saves multiple posts to the disk repo
+//
+// Ranges over the slice and try to save each post. Not returning an error if one of them fails until the end
+func (c *Client) SavePosts(ctx context.Context, posts []domain.Post) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-		for i, photo := range post.Photos {
-			photoFilenames, err := c.savePhoto(photoDirPath, fmt.Sprintf("%d.jpg", i), photo)
-			if err != nil {
-				return -1, err
-			}
-
-			post.Photos[i].Self.Filename = photoFilenames[0]
-			post.Photos[i].Self.Content = []byte{}
-
-			post.Photos[i].Preview.Filename = photoFilenames[1]
-			post.Photos[i].Preview.Content = []byte{}
-		}
-	}
-
-	if len(post.Videos) > 0 {
-		err := c.createDirIfNotExist(dirPath, post.ID)
+	var err error = nil
+	for _, post := range posts {
+		saveError := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
 		if err != nil {
-			return -1, err
-		}
-
-		for j, video := range post.Videos {
-			videoFilename, previewFilename, err := c.saveVideo(
-				fmt.Sprintf("%s/%d", dirPath, post.ID),
-				fmt.Sprintf("%d.mp4", j),
-				fmt.Sprintf("%sv%d.jpg", repository.PREVIEW_PREFIX, j),
-				video,
-			)
-			if err != nil {
-				if videoFilename == "" {
-					return -1, err
-				}
-				c.logger.Error("Failed to save preview for video",
-					"post_id", post.ID,
-					"video", videoFilename,
-					"error", err,
-				)
-			}
-
-			post.Videos[j].Filename = videoFilename
-			post.Videos[j].Content = []byte{}
-
-			post.Videos[j].Preview.Filename = previewFilename
-			post.Videos[j].Preview.Content = []byte{}
+			err = errors.Join(err, fmt.Errorf("post_%d", post.ID), saveError)
+			continue
 		}
 	}
 
-	err := c.saveCommentsAttachments(photoDirPath, &post.Comments)
+	return err
+}
+
+// savePost saves one post to the disk repo
+func (c *Client) savePost(dirPath, filePath string, post domain.Post) error {
+	if post.ID == -1 {
+		return domain.ERROR_NO_POST_ID
+	}
+	if c.isPathExist(filePath) {
+		return repository.ERR_POST_EXISTS
+	}
+
+	// creating a directory for the post attachments
+	err := c.createDirIfNotExist(dirPath, post.ID)
 	if err != nil {
-		return -1, err
+		return err
 	}
 
+	// saving all attachments including attachments in comments recursively
+	err = saveAttachments(c, fmt.Sprintf("%s/%d", dirPath, post.ID), &[]domain.Post{post})
+	if err != nil {
+		if errors.Is(err, ERR_NO_ENTITIES_GIVEN) {
+			c.logger.Warn(err.Error(),
+				"entity_type", "domain.Post",
+				"entity_id", post.ID,
+			)
+		} else {
+			return err
+		}
+	}
+
+	// checking if the attachment folder is empty and removing if it is
+	if c.isDirEmpty(fmt.Sprintf("%s/%d", dirPath, post.ID)) {
+		err := os.Remove(fmt.Sprintf("%s/%d", dirPath, post.ID))
+		if err != nil {
+			return err
+		}
+	}
+
+	// saving the post into JSON
 	file, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return -1, err
+		return err
 	}
 	defer file.Close()
 
 	jsonBytes, err := json.MarshalIndent(post, "", "  ")
 	if err != nil {
-		return -1, err
+		return err
 	}
 
 	_, err = file.Write(jsonBytes)
 	if err != nil {
-		return -1, err
+		return err
 	}
 
-	return post.ID, nil
+	return nil
 }
 
-func (c *Client) saveCommentsAttachments(dirPath string, comments *[]domain.Comment) error {
-	for i, comment := range *comments {
-		if len(comment.Photos) > 0 {
-			err := c.createDirIfNotExist(dirPath, comment.ID)
-			if err != nil {
-				return err
-			}
+// saveAttachments saves all attachments recursively including attachments in comments/replies
+func saveAttachments[T haveAttachments](repoClient *Client, dirPath string, entitiesWithAttachments *[]T) error {
+	if entitiesWithAttachments == nil {
+		return ERR_NO_ENTITIES_GIVEN
+	}
 
-			for j, photo := range comment.Photos {
-				photoFilenames, err := c.savePhoto(fmt.Sprintf("%s/%d", dirPath, comment.ID), fmt.Sprintf("p%d.jpg", j), photo)
+	for _, entity := range *entitiesWithAttachments {
+		// dealing with generic type
+		var (
+			id       *int
+			photos   *[]domain.Photo
+			videos   *[]domain.Video
+			comments *[]domain.Comment
+			preffix  string
+		)
+
+		switch t := any(entity).(type) {
+		case domain.Post:
+			id = &t.ID
+			photos = &t.Photos
+			videos = &t.Videos
+			comments = &t.Comments
+			preffix = "post"
+
+		case domain.Comment:
+			id = &t.ID
+			photos = &t.Photos
+			videos = &t.Videos
+			comments = &t.Replies
+			preffix = "comment"
+
+		default:
+			return ERR_UNKNOWN_TYPE_WITH_ATTACHMENTS
+		}
+
+		// saving photos
+		if photos != nil && len(*photos) > 0 {
+			for j, photo := range *photos {
+				photoFilename := fmt.Sprintf("%s%d_p%d.jpg", preffix, *id, j)
+				previewFilename := fmt.Sprintf("%s%d_p%d%s.jpg", preffix, *id, j, repository.PREVIEW_SUFFIX)
+
+				err := repoClient.savePhoto(
+					dirPath,
+					photoFilename,
+					previewFilename,
+					photo,
+				)
 				if err != nil {
 					return err
 				}
 
-				comment.Photos[j].Self.Filename = photoFilenames[0]
-				comment.Photos[j].Self.Content = []byte{}
+				// updating the original struct to contain filenames
+				(*photos)[j].Self.Filename = photoFilename
+				(*photos)[j].Preview.Filename = previewFilename
 
-				comment.Photos[j].Preview.Filename = photoFilenames[1]
-				comment.Photos[j].Preview.Content = []byte{}
+				//(*photos)[j].Self.Content = []byte{}
+				//(*photos)[j].Preview.Content = []byte{}
 			}
 		}
 
-		if len(comment.Videos) > 0 {
-			err := c.createDirIfNotExist(dirPath, comment.ID)
-			if err != nil {
-				return err
-			}
+		// saving videos
+		// TODO content generic??? kinda violates DRY???
+		if videos != nil && len(*videos) > 0 {
+			for j, video := range *videos {
+				videoFilename := fmt.Sprintf("%s%d_v%d.mp4", preffix, *id, j)
+				previewFilename := fmt.Sprintf("%s%d_v%d%s.jpg", preffix, *id, j, repository.PREVIEW_SUFFIX)
 
-			for j, video := range comment.Videos {
-				videoFilename, previewFilename, err := c.saveVideo(
-					fmt.Sprintf("%s/%d", dirPath, comment.ID),
-					fmt.Sprintf("v%d.mp4", j),
-					fmt.Sprintf("%sv%d.jpg", repository.PREVIEW_PREFIX, j),
+				err := repoClient.saveVideo(
+					dirPath,
+					videoFilename,
+					previewFilename,
 					video,
 				)
 				if err != nil {
-					if videoFilename == "" {
-						return err
-					}
-					c.logger.Error("Failed to save preview for video",
-						"comment_id", comment.ID,
-						"video", videoFilename,
-						"error", err,
-					)
+					return err
 				}
 
-				comment.Videos[j].Filename = videoFilename
-				comment.Videos[j].Content = []byte{}
+				// updating the original struct to contain filenames
+				(*videos)[j].Filename = videoFilename
+				(*videos)[j].Preview.Filename = previewFilename
 
-				comment.Videos[j].Preview.Filename = previewFilename
-				comment.Videos[j].Preview.Content = []byte{}
+				//(*videos)[j].Content = []byte{}
+				//(*videos)[j].Preview.Content = []byte{}
 			}
 		}
 
-		err := c.saveCommentsAttachments(dirPath, &(*comments)[i].Replies)
+		// saving comments' attachments recursively
+		if comments == nil || len(*comments) == 0 {
+			continue
+		}
+		err := saveAttachments(repoClient, dirPath, comments)
 		if err != nil {
-			return err
+			if errors.Is(err, ERR_NO_ENTITIES_GIVEN) {
+				repoClient.logger.Warn(err.Error(),
+					"entity_type", reflect.TypeOf(entity),
+					"entity_id", *id,
+				)
+			} else {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (c *Client) createDirIfNotExist(parentPath string, dirName any) error {
-	if !c.isPathExist(fmt.Sprintf("%s/%v", parentPath, dirName)) {
-		err := os.MkdirAll(fmt.Sprintf("%s/%v", parentPath, dirName), 0755)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *Client) saveVideo(dirPath, videoFilename string, previewFilename string, video domain.Video) (string, string, error) {
+func (c *Client) saveVideo(dirPath, videoFilename, previewFilename string, video domain.Video) error {
 	// saving video itself
 	file, err := os.OpenFile(fmt.Sprintf("%s/%s", dirPath, videoFilename), os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		return "", "", err
+		return err
 	}
 	defer file.Close()
 
@@ -282,36 +320,39 @@ func (c *Client) saveVideo(dirPath, videoFilename string, previewFilename string
 	// saving preview
 	err = c.savePicture(dirPath, previewFilename, video.Preview)
 	if err != nil {
-		return videoFilename, "", err
+		c.logger.Warn("can't save preview",
+			"video", videoFilename,
+			"error", err,
+		)
 	}
 
-	return videoFilename, previewFilename, nil
+	return nil
 }
 
-func (c *Client) savePhoto(dirPath, filename string, photo domain.Photo) ([]string, error) {
-	filenames := make([]string, 2)
-
-	name := filename
-	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
-		return nil, repository.ERR_PHOTO_EXISTS
+func (c *Client) savePhoto(dirPath, photoFilename, previewFilename string, photo domain.Photo) error {
+	// saving photo itself
+	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, photoFilename)) {
+		return fmt.Errorf("%s for %s", repository.ERR_PHOTO_EXISTS.Error(), photoFilename)
 	}
-	err := c.savePicture(dirPath, name, photo.Self)
+	err := c.savePicture(dirPath, photoFilename, photo.Self)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	filenames[0] = name
 
-	name = fmt.Sprintf("%s%s", repository.PREVIEW_PREFIX, filename)
-	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, name)) {
-		return nil, repository.ERR_PHOTO_EXISTS
+	// saving preview
+	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, previewFilename)) {
+		return fmt.Errorf("%s for %s", repository.ERR_PHOTO_EXISTS.Error(), previewFilename)
 	}
-	err = c.savePicture(dirPath, name, photo.Preview)
+	err = c.savePicture(dirPath, previewFilename, photo.Preview)
 	if err != nil {
-		return nil, err
+		c.logger.Warn("can't save preview",
+			"photo", photoFilename,
+			"preview", previewFilename,
+			"error", err,
+		)
 	}
-	filenames[1] = name
 
-	return filenames, nil
+	return nil
 }
 
 func (c *Client) savePicture(dirPath, filename string, photo domain.Picture) error {
@@ -326,31 +367,38 @@ func (c *Client) savePicture(dirPath, filename string, photo domain.Picture) err
 	return nil
 }
 
-func (c *Client) SavePost(ctx context.Context, post domain.Post) (int, error) {
+// GET
+
+// GetPost returns one post or an error if something failed
+func (c *Client) GetPost(ctx context.Context, postID int) (domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.savePost(c.directoryPath(), c.filePath(post.ID), post)
+	return c.getPost(c.buildPostFilePath(postID))
 }
 
-func (c *Client) SavePosts(ctx context.Context, posts []domain.Post) (map[int]int, error) {
+// GetPosts returns multiple posts or an error if something failed
+//
+// Ranges over the slice and try to get each post. Not returning an error if one of them fails until the end
+func (c *Client) GetPosts(ctx context.Context, postIDs []int) (map[int]domain.Post, error) {
+	posts := make(map[int]domain.Post, len(postIDs))
+	var err error = nil
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	postIDs := make(map[int]int, len(posts))
-	for _, post := range posts {
-		id, err := c.savePost(c.directoryPath(), c.filePath(post.ID), post)
+	for i, postID := range postIDs {
+		post, getError := c.getPost(c.buildPostFilePath(postID))
 		if err != nil {
-			return nil, err
+			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
+			continue
 		}
 
-		postIDs[id] = post.ID
+		posts[i] = post
 	}
 
-	return postIDs, nil
+	return posts, err
 }
-
-// GET
 
 func (c *Client) getPost(filePath string) (domain.Post, error) {
 	post := domain.Post{}
@@ -360,6 +408,7 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 		return post, repository.ERR_POST_NOT_FOUND
 	}
 
+	// reading post itself
 	file, err := os.OpenFile(filePath, os.O_RDONLY, 0644)
 	if err != nil {
 		return post, err
@@ -371,29 +420,16 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 		return post, err
 	}
 
-	photoDirPath := strings.TrimSuffix(filePath, ".json")
-
-	if len(post.Photos) > 0 {
-		for i := range post.Photos {
-			err := c.getPhoto(photoDirPath, &post.Photos[i])
-			if err != nil {
-				return post, err
-			}
-		}
-	}
-
-	if len(post.Videos) > 0 {
-		for i := range post.Videos {
-			err := c.getVideo(photoDirPath, &post.Videos[i])
-			if err != nil {
-				return post, err
-			}
-		}
-	}
-
-	if len(post.Comments) > 0 {
-		err = c.fillCommentsAttachments(photoDirPath, &post.Comments)
-		if err != nil {
+	// filling attachments' content
+	attachmentsDirPath := strings.TrimSuffix(filePath, ".json")
+	err = fillAttachments(c, attachmentsDirPath, &[]domain.Post{post})
+	if err != nil {
+		if errors.Is(err, ERR_NO_ENTITIES_GIVEN) {
+			c.logger.Warn(err.Error(),
+				"entity_type", "post",
+				"entity_id", post.ID,
+			)
+		} else {
 			return post, err
 		}
 	}
@@ -401,38 +437,79 @@ func (c *Client) getPost(filePath string) (domain.Post, error) {
 	return post, err
 }
 
-func (c *Client) fillCommentsAttachments(dirPath string, replies *[]domain.Comment) error {
-	for i := range *replies {
-		for j := range (*replies)[i].Photos {
-			err := c.getPhoto(dirPath, &(*replies)[i].Photos[j])
+// fillAttachments fills given attachments recursively including attachments in comments/replies
+//
+// it works with an existing post/comments slice and modifies it in-place
+func fillAttachments[T haveAttachments](repoClient *Client, dirPath string, entitiesWithAttachments *[]T) error {
+	if len(*entitiesWithAttachments) == 0 {
+		return ERR_NO_ENTITIES_GIVEN
+	}
+
+	for _, entity := range *entitiesWithAttachments {
+		// dealing with generic type
+		var (
+			id       *int
+			photos   *[]domain.Photo
+			videos   *[]domain.Video
+			comments *[]domain.Comment
+		)
+
+		switch t := any(entity).(type) {
+		case domain.Post:
+			id = &t.ID
+			photos = &t.Photos
+			videos = &t.Videos
+			comments = &t.Comments
+		case domain.Comment:
+			id = &t.ID
+			photos = &t.Photos
+			videos = &t.Videos
+			comments = &t.Replies
+
+		default:
+			return ERR_UNKNOWN_TYPE_WITH_ATTACHMENTS
+		}
+
+		// filling photos
+		for j := range *photos {
+			err := repoClient.fillPhoto(dirPath, &(*photos)[j])
 			if err != nil {
 				return err
 			}
 		}
 
-		for j := range (*replies)[i].Videos {
-			err := c.getVideo(dirPath, &(*replies)[i].Videos[j])
+		// filling videos
+		for j := range *videos {
+			err := repoClient.fillVideo(dirPath, &(*videos)[j])
 			if err != nil {
 				return err
 			}
 		}
 
-		err := c.fillCommentsAttachments(dirPath, &(*replies)[i].Replies)
+		// filling comments' attachments recursively
+		if comments == nil || len(*comments) == 0 {
+			continue
+		}
+		err := fillAttachments(repoClient, dirPath, comments)
 		if err != nil {
-			return err
+			if errors.Is(err, ERR_NO_ENTITIES_GIVEN) {
+				repoClient.logger.Warn(err.Error(),
+					"entity_type", reflect.TypeOf(entity),
+					"entity_id", *id,
+				)
+			} else {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (c *Client) getVideo(dirPath string, video *domain.Video) error {
-	c.logger.Debug("Reading Videos",
-		"directory_path", dirPath,
-		"video_filename", video.Filename,
-		"preview_filename", video.Preview.Filename,
-	)
-
+// fillAttachments fills given video
+//
+// it works with an existing video and modifies it in-place
+func (c *Client) fillVideo(dirPath string, video *domain.Video) error {
 	videoFile, err := c.readFile(dirPath, video.Filename)
 	if err != nil {
 		return err
@@ -448,24 +525,21 @@ func (c *Client) getVideo(dirPath string, video *domain.Video) error {
 	return nil
 }
 
-func (c *Client) getPhoto(dirPath string, photo *domain.Photo) error {
-	c.logger.Debug("Reading Photos",
-		"dirPath", dirPath,
-		"bigFilename", photo.Self.Filename,
-		"smallFilename", photo.Preview.Filename,
-	)
-
-	bigPhoto, err := c.readFile(dirPath, photo.Self.Filename)
+// fillAttachments fills given photo
+//
+// it works with an existing photo and modifies it in-place
+func (c *Client) fillPhoto(dirPath string, photo *domain.Photo) error {
+	photoItself, err := c.readFile(dirPath, photo.Self.Filename)
 	if err != nil {
 		return err
 	}
-	photo.Self.Content = bigPhoto
+	photo.Self.Content = photoItself
 
-	smallPhoto, err := c.readFile(dirPath, photo.Preview.Filename)
+	photoPreview, err := c.readFile(dirPath, photo.Preview.Filename)
 	if err != nil {
 		return err
 	}
-	photo.Preview.Content = smallPhoto
+	photo.Preview.Content = photoPreview
 
 	return nil
 }
@@ -484,32 +558,47 @@ func (c *Client) readFile(dirPath, filename string) ([]byte, error) {
 	return io.ReadAll(file)
 }
 
-func (c *Client) GetPost(ctx context.Context, postID int) (domain.Post, error) {
+// GET all
+
+// GetAllPosts returns all posts
+//
+// Ranges over the slice and try to get each post. Not returning an error if one of them fails until the end
+func (c *Client) GetAllPosts(ctx context.Context) ([]domain.Post, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.getPost(c.filePath(postID))
-}
+	var err error = nil
 
-func (c *Client) GetPosts(ctx context.Context, postIDs []int) ([]domain.Post, error) {
-	posts := make([]domain.Post, len(postIDs))
+	postIDs, err := c.getExistingPostIDs(c.buildAuthorPath())
+	if err != nil {
+		return nil, err
+	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	posts := make([]domain.Post, 0, len(postIDs))
 
-	for i, postID := range postIDs {
-		post, err := c.getPost(c.filePath(postID))
+	for _, postID := range postIDs {
+		post, getError := c.getPost(c.buildPostFilePath(postID))
 		if err != nil {
-			return nil, err
+			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
+			continue
 		}
 
-		posts[i] = post
+		posts = append(posts, post)
 	}
 
 	return posts, nil
 }
 
-// GET all
+// GetExistingPostIDs returns all existing post ids
+//
+// Ranges over the database and try to get each filename. Not returning an error if one of them fails until the end.
+// The result may be not empty even if error is not nil - if some filenames were valid but other filenames couldn't be parsed.
+func (c *Client) GetExistingPostIDs(ctx context.Context) ([]int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.getExistingPostIDs(c.buildAuthorPath())
+}
 
 func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	postIDs := make([]int, 0)
@@ -525,52 +614,83 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 
 	for _, file := range files {
 		filename := file.Name()
-		c.logger.Debug("File found",
-			"filename", filename,
-		)
 
-		id, err := strconv.Atoi(strings.TrimSuffix(filename, ".json"))
-		if err != nil {
-			return nil, err
+		id, parseErr := strconv.Atoi(strings.TrimSuffix(filename, ".json"))
+		if parseErr != nil {
+			err = errors.Join(err, fmt.Errorf("file_%s", filename), parseErr)
+			continue
 		}
 
 		postIDs = append(postIDs, id)
 	}
 
-	return postIDs, nil
-}
-
-func (c *Client) GetExistingPostIDs(ctx context.Context) ([]int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.getExistingPostIDs(c.directoryPath())
-}
-
-func (c *Client) GetAllPosts(ctx context.Context) ([]domain.Post, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	postIDs, err := c.getExistingPostIDs(c.directoryPath())
-	if err != nil {
-		return nil, err
-	}
-
-	posts := make([]domain.Post, len(postIDs))
-
-	for i, postID := range postIDs {
-		post, err := c.getPost(c.filePath(postID))
-		if err != nil {
-			return nil, err
-		}
-
-		posts[i] = post
-	}
-
-	return posts, nil
+	return postIDs, err
 }
 
 // UPDATE
+
+// UpdatePost updates one post
+func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.updatePost(c.buildPostFilePath(post.ID), post)
+}
+
+// UpdatePosts updates multiple posts
+//
+// Ranges over the slice and try to update each post. Returning a combined error in the end of the range
+func (c *Client) UpdatePosts(ctx context.Context, posts []domain.Post) error {
+	var err error = nil
+
+	for _, post := range posts {
+		updateErr := c.updatePost(c.buildPostFilePath(post.ID), post)
+		if err != nil {
+			err = errors.Join(err, fmt.Errorf("post_%d", post.ID), updateErr)
+			continue
+		}
+	}
+
+	return err
+}
+
+// UpdateOrSavePost updates a post if it exists, otherwise saves it
+func (c *Client) UpdateOrSavePost(ctx context.Context, post domain.Post) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	err := c.updatePost(c.buildPostFilePath(post.ID), post)
+	if err != nil {
+		if err == repository.ERR_POST_NOT_FOUND {
+			return c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
+		}
+	}
+
+	return err
+}
+
+// UpdateOrSavePosts updates a post if it exists, otherwise saves it
+//
+// Ranges over the slice and try to update or save each post. Returning a combined error in the end of the range
+func (c *Client) UpdateOrSavePosts(posts []domain.Post) error {
+	var err error = nil
+
+	for _, post := range posts {
+		updateErr := c.updatePost(c.buildPostFilePath(post.ID), post)
+		if updateErr != nil {
+			if updateErr == repository.ERR_POST_NOT_FOUND {
+				saveErr := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
+
+				if saveErr != nil {
+					err = errors.Join(err, fmt.Errorf("post_%d", post.ID), updateErr, saveErr)
+					continue
+				}
+			}
+		}
+	}
+
+	return err
+}
 
 func (c *Client) updatePost(filePath string, post domain.Post) error {
 	if !c.isPathExist(filePath) {
@@ -592,57 +712,41 @@ func (c *Client) updatePost(filePath string, post domain.Post) error {
 	return err
 }
 
-func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.updatePost(c.filePath(post.ID), post)
-}
-
-func (c *Client) UpdatePosts(ctx context.Context, posts []domain.Post) error {
-	for _, post := range posts {
-		err := c.updatePost(c.filePath(post.ID), post)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *Client) UpdateOrSavePosts(posts []domain.Post) error {
-	for _, post := range posts {
-		err := c.updatePost(c.filePath(post.ID), post)
-		if err != nil {
-			if err == repository.ERR_POST_NOT_FOUND {
-				_, err = c.savePost(c.directoryPath(), c.filePath(post.ID), post)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // DELETE
 
-func (c *Client) deletePost(filePath string) error {
-	if c.isPathExist(filePath) {
-		return repository.ERR_POST_NOT_FOUND
-	}
-
-	return os.Remove(filePath)
-}
-
+// DeletePost deletes one post
 func (c *Client) DeletePost(ctx context.Context, postID int) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.deletePost(c.filePath(postID))
+	return c.deletePost(postID)
 }
 
+// deletePost deletes one post hardly removing a file and a corresponding directory of attachments if it exists from disk
+func (c *Client) deletePost(postID int) error {
+	if !c.isPathExist(c.buildPostFilePath(postID)) {
+		return repository.ERR_POST_NOT_FOUND
+	}
+
+	var err error = nil
+	if c.isPathExist(c.buildPostAttachmentsDirPath(postID)) {
+		err = os.Remove(c.buildPostAttachmentsDirPath(postID))
+	}
+
+	return errors.Join(err, os.Remove(c.buildPostFilePath(postID)))
+}
+
+// CLEAR
+
+// Clear deletes all posts
+func (c *Client) Clear(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return c.clear(c.buildAuthorPath())
+}
+
+// clear deletes all posts hardly removing a directory from disk
 func (c *Client) clear(dirPath string) error {
 	if !c.isPathExist(dirPath) {
 		return nil
@@ -651,26 +755,35 @@ func (c *Client) clear(dirPath string) error {
 	return os.RemoveAll(dirPath)
 }
 
-func (c *Client) Clear(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.clear(c.directoryPath())
-}
-
 // HELPERS
 
-func (c *Client) filePath(postID int) string {
-	return fmt.Sprintf("%s/%d.json", c.directoryPath(), postID)
+// buildPostFilePath returns a string with presumable path to a file containing a post with .json extension
+func (c *Client) buildPostFilePath(postID int) string {
+	return fmt.Sprintf("%s/%d.json", c.buildAuthorPath(), postID)
 }
 
-func (c *Client) directoryPath() string {
+// buildPostAttachmentsDirPath returns a string with presumable path to a directory containing attachments of a post
+func (c *Client) buildPostAttachmentsDirPath(postID int) string {
+	return fmt.Sprintf("%s/%d", c.buildAuthorPath(), postID)
+}
+
+// buildAuthorPath returns a string with presumable path to a directory containing posts of the author
+func (c *Client) buildAuthorPath() string {
 	return fmt.Sprintf("%s/%s/%s", c.basePath, c.providerName, c.authorID)
 }
 
 func (c *Client) isPathExist(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+func (c *Client) isDirEmpty(path string) bool {
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return true
+	}
+
+	return len(files) == 0
 }
 
 func (c *Client) revealInExplorer(path string) error {
@@ -714,4 +827,15 @@ func (c *Client) isSafePath(baseDir, userPath string) bool {
 	}
 
 	return !strings.HasPrefix(rel, "..") && rel != ".."
+}
+
+func (c *Client) createDirIfNotExist(parentPath string, dirName any) error {
+	if !c.isPathExist(fmt.Sprintf("%s/%v", parentPath, dirName)) {
+		err := os.MkdirAll(fmt.Sprintf("%s/%v", parentPath, dirName), 0755)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

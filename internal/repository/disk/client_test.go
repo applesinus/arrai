@@ -24,10 +24,11 @@ const (
 	testProvider = "provider"
 	testAuthor   = "author"
 
-	photoSelfPreffix    = "big"
-	photoPreviewPreffix = "small"
-	photoUrl            = "url"
-	photoFilename       = "filename"
+	photoSelfPreffix = "photo"
+	videoSelfPreffix = "video"
+	previewPreffix   = "preview"
+	photoUrl         = "url"
+	photoFilename    = "filename"
 )
 
 func authorPath() string {
@@ -52,6 +53,26 @@ func testSetup(t *testing.T) {
 	})
 }
 
+func createMockPhoto(t *testing.T, ID string) domain.Photo {
+	return domain.Photo{
+		Self:    createMockPicture(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
+		Preview: createMockPicture(t, fmt.Sprintf("%s_%s", previewPreffix, ID)),
+	}
+}
+
+func createMockVideo(t *testing.T, ID string) domain.Video {
+	return domain.Video{
+		Url:      fmt.Sprintf("%s_%s", videoSelfPreffix, ID),
+		Filename: "",
+
+		Title:       fmt.Sprintf("title_%s", ID),
+		Description: fmt.Sprintf("description_%s", ID),
+		Preview:     createMockPicture(t, fmt.Sprintf("%s_%s", previewPreffix, ID)),
+
+		Content: []byte("AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAsxtZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMjc0OCA5N2VhZWYyIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNiAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD00IHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAPZYiEACv//vXb8yyubp//AAAC7W1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAoAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAQAAAAEAAAAAAAJGVkdHMAAAAcZWxzdAAAAAAAAAABAAAAKAAAAAAAAQAAAAABj21kaWEAAAAgbWRoZAAAAAAAAAAAAAAAAAAAMgAAAAIAVcQAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAATptaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAD6c3RibAAAAJZzdHNkAAAAAAAAAAEAAACGYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAQABAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADBhdmNDAfQACv/hABdn9AAKkZsr02QAAAMABAAAAwDIPEiWWAEABmjr48RIRAAAABhzdHRzAAAAAAAAAAEAAAABAAACAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAALEAAAAAQAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ny41Ni4xMDE="),
+	}
+}
+
 func createMockPicture(t *testing.T, preffix string) domain.Picture {
 	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{1, 1}})
 	img.Set(0, 0, color.Black)
@@ -64,28 +85,8 @@ func createMockPicture(t *testing.T, preffix string) domain.Picture {
 
 	return domain.Picture{
 		Url:      fmt.Sprintf("%s_%s", preffix, photoUrl),
-		Filename: fmt.Sprintf("%s_%s", preffix, photoFilename),
+		Filename: "",
 		Content:  buf.Bytes(),
-	}
-}
-
-func createMockPhoto(t *testing.T, ID string) domain.Photo {
-	return domain.Photo{
-		Self:    createMockPicture(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
-		Preview: createMockPicture(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
-	}
-}
-
-func createMockVideo(t *testing.T, ID string) domain.Video {
-	return domain.Video{
-		Url:      fmt.Sprintf("%s_%s", photoUrl, ID),
-		Filename: fmt.Sprintf("%s_%s", photoFilename, ID),
-
-		Title:       fmt.Sprintf("title_%s", ID),
-		Description: fmt.Sprintf("description_%s", ID),
-		Preview:     createMockPicture(t, fmt.Sprintf("%s_%s", photoPreviewPreffix, ID)),
-
-		Content: []byte("AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAsxtZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMjc0OCA5N2VhZWYyIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNiAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD00IHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAPZYiEACv//vXb8yyubp//AAAC7W1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAoAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAQAAAAEAAAAAAAJGVkdHMAAAAcZWxzdAAAAAAAAAABAAAAKAAAAAAAAQAAAAABj21kaWEAAAAgbWRoZAAAAAAAAAAAAAAAAAAAMgAAAAIAVcQAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAATptaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAD6c3RibAAAAJZzdHNkAAAAAAAAAAEAAACGYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAQABAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADBhdmNDAfQACv/hABdn9AAKkZsr02QAAAMABAAAAwDIPEiWWAEABmjr48RIRAAAABhzdHRzAAAAAAAAAAEAAAABAAACAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAALEAAAAAQAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ny41Ni4xMDE="),
 	}
 }
 
@@ -514,7 +515,7 @@ func TestSavePost(t *testing.T) {
 			expectedInt: ID,
 			expextedErr: nil,
 		},
-		"postWithOneEveryAttachmentInComment": {
+		"postWithOneEveryAttachmentInCommentSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -535,7 +536,7 @@ func TestSavePost(t *testing.T) {
 			expectedInt: ID,
 			expextedErr: nil,
 		},
-		"postWithNamyEveryAttachmentInComment": {
+		"postWithManyEveryAttachmentInCommentSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -611,9 +612,8 @@ func TestSavePost(t *testing.T) {
 			test.setupFunc()
 			defer test.teardownFunc()
 
-			gotInt, gotErr := client.SavePost(ctx, test.post)
+			gotErr := client.SavePost(ctx, test.post)
 			assert.ErrorIs(t, gotErr, test.expextedErr)
-			assert.Equal(t, test.expectedInt, gotInt)
 
 			if gotErr == nil {
 				fullPath := fmt.Sprintf("%s/%s/%s/%d.json", testBasePath, testProvider, testAuthor, ID)
@@ -629,12 +629,12 @@ func TestSavePost(t *testing.T) {
 						func() {
 							defer file.Close()
 
-							var post domain.Post
-							err = json.NewDecoder(file).Decode(&post)
+							var shouldEqualPost domain.Post
+							err = json.NewDecoder(file).Decode(&shouldEqualPost)
 							if err != nil {
 								t.Errorf("File with ID %d could not be decoded", ID)
 							} else {
-								assert.Equal(t, test.post, post)
+								assert.Equal(t, test.post, shouldEqualPost)
 							}
 						}()
 					}

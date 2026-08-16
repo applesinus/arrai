@@ -7,7 +7,7 @@ import (
 const (
 	BASE_PATH_ENV_KEY = "DISK_REPO_BASE_PATH"
 
-	PREVIEW_PREFIX = "preview_"
+	PREVIEW_SUFFIX = "_preview"
 )
 
 var (

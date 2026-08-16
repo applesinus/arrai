@@ -109,7 +109,7 @@ func main() {
 	if debugMode {
 		defer repo.Clear(ctx)
 
-		postID, err := repo.SavePost(ctx, (*posts)[0])
+		err := repo.SavePost(ctx, (*posts)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -118,7 +118,7 @@ func main() {
 		}
 
 		logger.Debug("First post saved to repository",
-			"post_id", postID,
+			"post_id", (*posts)[0].ID,
 		)
 
 		postIDs, err := repo.GetExistingPostIDs(ctx)
