@@ -6,6 +6,7 @@ import (
 	"arrai/internal/repository"
 	"arrai/internal/repository/disk"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -31,6 +32,85 @@ const (
 	photoFilename    = "filename"
 )
 
+var (
+	postID       = 1
+	ownerID      = 2
+	creationTime = time.Now().Truncate(0)
+	views        = 3
+	reactions    = 4
+	reposts      = 5
+	text         = "text"
+	photo1       = createMockPhoto("1")
+	photo2       = createMockPhoto("2")
+	video1       = createMockVideo("3")
+	video2       = createMockVideo("4")
+	comment1     = domain.Comment{
+		ID:        6,
+		CreatedAt: time.Now().Truncate(0),
+		User:      "user",
+		IsAuthor:  true,
+		Reactions: 7,
+		Text:      "text",
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Replies:   []domain.Comment{},
+	}
+	comment2 = domain.Comment{
+		ID:        8,
+		CreatedAt: time.Now().Truncate(0),
+		User:      "user",
+		IsAuthor:  true,
+		Reactions: 9,
+		Text:      "text",
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Replies:   []domain.Comment{},
+	}
+	commentWithOneEveryAttachment = domain.Comment{
+		ID:        10,
+		CreatedAt: time.Now().Truncate(0),
+		User:      "user",
+		IsAuthor:  true,
+		Reactions: 11,
+		Text:      "text",
+		Photos: []domain.Photo{
+			photo1,
+		},
+		Videos: []domain.Video{
+			video1,
+		},
+		Replies: []domain.Comment{},
+	}
+	commentWithManyEveryAttachment = domain.Comment{
+		ID:        12,
+		CreatedAt: time.Now().Truncate(0),
+		User:      "user",
+		IsAuthor:  true,
+		Reactions: 13,
+		Text:      "text",
+		Photos: []domain.Photo{
+			photo1,
+			photo2,
+		},
+		Videos: []domain.Video{
+			video1,
+			video2,
+		},
+		Replies: []domain.Comment{},
+	}
+	thread = domain.Comment{
+		ID:        14,
+		CreatedAt: time.Now().Truncate(0),
+		User:      "user",
+		IsAuthor:  true,
+		Reactions: 15,
+		Text:      "text",
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Replies:   []domain.Comment{comment1, comment2, commentWithOneEveryAttachment, commentWithManyEveryAttachment},
+	}
+)
+
 func authorPath() string {
 	return fmt.Sprintf("%s/%s/%s", testBasePath, testProvider, testAuthor)
 }
@@ -39,7 +119,7 @@ func postPath(postID int) string {
 	return fmt.Sprintf("%s/%d.json", authorPath(), postID)
 }
 
-func testSetup(t *testing.T) {
+func testSetup(t *testing.T) (context.Context, *slog.Logger, *appEnv.AppEnv) {
 	envFile := ".env"
 	content := []byte(fmt.Sprintf("%s=%s", repository.BASE_PATH_ENV_KEY, testBasePath))
 
@@ -51,36 +131,40 @@ func testSetup(t *testing.T) {
 	t.Cleanup(func() {
 		os.Remove(envFile)
 	})
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	return t.Context(), logger, appEnv.New(logger)
 }
 
-func createMockPhoto(t *testing.T, ID string) domain.Photo {
+func createMockPhoto(ID string) domain.Photo {
 	return domain.Photo{
-		Self:    createMockPicture(t, fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
-		Preview: createMockPicture(t, fmt.Sprintf("%s_%s", previewPreffix, ID)),
+		Self:    createMockPicture(fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
+		Preview: createMockPicture(fmt.Sprintf("%s_%s", previewPreffix, ID)),
 	}
 }
 
-func createMockVideo(t *testing.T, ID string) domain.Video {
+func createMockVideo(ID string) domain.Video {
 	return domain.Video{
 		Url:      fmt.Sprintf("%s_%s", videoSelfPreffix, ID),
 		Filename: "",
 
 		Title:       fmt.Sprintf("title_%s", ID),
 		Description: fmt.Sprintf("description_%s", ID),
-		Preview:     createMockPicture(t, fmt.Sprintf("%s_%s", previewPreffix, ID)),
+		Preview:     createMockPicture(fmt.Sprintf("%s_%s", previewPreffix, ID)),
 
 		Content: []byte("AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAsxtZGF0AAACrQYF//+p3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE0OCByMjc0OCA5N2VhZWYyIC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAxNiAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTEgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MzoweDExMyBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MSBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD00IHRocmVhZHM9MSBsb29rYWhlYWRfdGhyZWFkcz0xIHNsaWNlZF90aHJlYWRzPTAgbnI9MCBkZWNpbWF0ZT0xIGludGVybGFjZWQ9MCBibHVyYXlfY29tcGF0PTAgY29uc3RyYWluZWRfaW50cmE9MCBiZnJhbWVzPTMgYl9weXJhbWlkPTIgYl9hZGFwdD0xIGJfYmlhcz0wIGRpcmVjdD0xIHdlaWdodGI9MSBvcGVuX2dvcD0wIHdlaWdodHA9MiBrZXlpbnQ9MjUwIGtleWludF9taW49MjUgc2NlbmVjdXQ9NDAgaW50cmFfcmVmcmVzaD0wIHJjX2xvb2thaGVhZD00MCByYz1jcmYgbWJ0cmVlPTEgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MToxLjAwAIAAAAAPZYiEACv//vXb8yyubp//AAAC7W1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAIXdHJhawAAAFx0a2hkAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAoAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAQAAAAEAAAAAAAJGVkdHMAAAAcZWxzdAAAAAAAAAABAAAAKAAAAAAAAQAAAAABj21kaWEAAAAgbWRoZAAAAAAAAAAAAAAAAAAAMgAAAAIAVcQAAAAAAC1oZGxyAAAAAAAAAAB2aWRlAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAATptaW5mAAAAFHZtaGQAAAABAAAAAAAAAAAAAAAkZGluZgAAABxkcmVmAAAAAAAAAAEAAAAMdXJsIAAAAAEAAAD6c3RibAAAAJZzdHNkAAAAAAAAAAEAAACGYXZjMQAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAQABAASAAAAEgAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABj//wAAADBhdmNDAfQACv/hABdn9AAKkZsr02QAAAMABAAAAwDIPEiWWAEABmjr48RIRAAAABhzdHRzAAAAAAAAAAEAAAABAAACAAAAABxzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAALEAAAAAQAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY1Ny41Ni4xMDE="),
 	}
 }
 
-func createMockPicture(t *testing.T, preffix string) domain.Picture {
+func createMockPicture(preffix string) domain.Picture {
 	img := image.NewRGBA(image.Rectangle{image.Point{0, 0}, image.Point{1, 1}})
 	img.Set(0, 0, color.Black)
 
 	var buf bytes.Buffer
 	err := jpeg.Encode(&buf, img, nil)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
 
 	return domain.Picture{
@@ -90,7 +174,7 @@ func createMockPicture(t *testing.T, preffix string) domain.Picture {
 	}
 }
 
-func TestNew(t *testing.T) {
+func TestClient_New(t *testing.T) {
 	testSetup(t)
 
 	// Creating test values
@@ -265,99 +349,17 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestSavePost(t *testing.T) {
-	testSetup(t)
-
-	// Creating test values
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	env := appEnv.New(logger)
-	ctx := t.Context()
-
-	ID := 1
-	ownerID := 2
-	creationTime := time.Now().Truncate(0)
-	views := 3
-	reactions := 4
-	reposts := 5
-	text := "text"
-	photo1 := createMockPhoto(t, "1")
-	photo2 := createMockPhoto(t, "2")
-	video1 := createMockVideo(t, "3")
-	video2 := createMockVideo(t, "4")
-	comment1 := domain.Comment{
-		ID:        6,
-		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 7,
-		Text:      "text",
-		Photos:    []domain.Photo{},
-		Videos:    []domain.Video{},
-		Replies:   []domain.Comment{},
-	}
-	comment2 := domain.Comment{
-		ID:        8,
-		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 9,
-		Text:      "text",
-		Photos:    []domain.Photo{},
-		Videos:    []domain.Video{},
-		Replies:   []domain.Comment{},
-	}
-	commentWithOneEveryAttachment := domain.Comment{
-		ID:        10,
-		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 11,
-		Text:      "text",
-		Photos: []domain.Photo{
-			photo1,
-		},
-		Videos: []domain.Video{
-			video1,
-		},
-		Replies: []domain.Comment{},
-	}
-	commentWithManyEveryAttachment := domain.Comment{
-		ID:        12,
-		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 13,
-		Text:      "text",
-		Photos: []domain.Photo{
-			photo1,
-			photo2,
-		},
-		Videos: []domain.Video{
-			video1,
-			video2,
-		},
-		Replies: []domain.Comment{},
-	}
-	thread := domain.Comment{
-		ID:        14,
-		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 15,
-		Text:      "text",
-		Photos:    []domain.Photo{},
-		Videos:    []domain.Video{},
-		Replies:   []domain.Comment{comment1, comment2, commentWithOneEveryAttachment, commentWithManyEveryAttachment},
-	}
+// Depends on working New
+func TestClient_SavePost(t *testing.T) {
+	ctx, logger, env := testSetup(t)
 
 	// Test cases
 	testsTable := map[string]struct {
 		setupFunc    func()
 		teardownFunc func()
 
-		post domain.Post
+		post *domain.Post
 
-		expectedInt int
 		expextedErr error
 	}{
 		// Success cases
@@ -365,8 +367,8 @@ func TestSavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -378,15 +380,14 @@ func TestSavePost(t *testing.T) {
 				Comments:  []domain.Comment{},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithOnePhotoSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -396,18 +397,18 @@ func TestSavePost(t *testing.T) {
 				Photos: []domain.Photo{
 					photo1,
 				},
+				Videos:   []domain.Video{},
 				Comments: []domain.Comment{},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithOneVideoSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -421,15 +422,14 @@ func TestSavePost(t *testing.T) {
 				Comments: []domain.Comment{},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithManyPhotosSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -444,15 +444,14 @@ func TestSavePost(t *testing.T) {
 				Comments: []domain.Comment{},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithManyVideoSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -467,15 +466,14 @@ func TestSavePost(t *testing.T) {
 				Comments: []domain.Comment{},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithOneCommentSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -489,15 +487,14 @@ func TestSavePost(t *testing.T) {
 				},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithManyCommentsSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -512,15 +509,14 @@ func TestSavePost(t *testing.T) {
 				},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithOneEveryAttachmentInCommentSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -528,20 +524,20 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments: []domain.Comment{
 					commentWithOneEveryAttachment,
 				},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithManyEveryAttachmentInCommentSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -549,20 +545,20 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments: []domain.Comment{
 					commentWithManyEveryAttachment,
 				},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 		"postWithCommentsThreadSuccess": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        ID,
+			post: &domain.Post{
+				ID:        postID,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
 				Views:     views,
@@ -570,12 +566,12 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments: []domain.Comment{
 					thread,
 				},
 			},
 
-			expectedInt: ID,
 			expextedErr: nil,
 		},
 
@@ -584,7 +580,7 @@ func TestSavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
+			post: &domain.Post{
 				ID:        -1,
 				OwnerID:   ownerID,
 				CreatedAt: creationTime,
@@ -593,12 +589,14 @@ func TestSavePost(t *testing.T) {
 				Reposts:   reposts,
 				Text:      text,
 				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
 				Comments:  []domain.Comment{},
 			},
 
-			expectedInt: -1,
 			expextedErr: domain.ERROR_NO_POST_ID,
 		},
+		// TODO fail cases
+		// TODO concurrency cases
 	}
 
 	// Running tests
@@ -612,32 +610,133 @@ func TestSavePost(t *testing.T) {
 			test.setupFunc()
 			defer test.teardownFunc()
 
+			// saving one post
 			gotErr := client.SavePost(ctx, test.post)
 			assert.ErrorIs(t, gotErr, test.expextedErr)
 
+			// validating saved post
 			if gotErr == nil {
-				fullPath := fmt.Sprintf("%s/%s/%s/%d.json", testBasePath, testProvider, testAuthor, ID)
+				validateSavedPost(t, *test.post, test.post.ID)
+			}
 
-				_, err = os.Stat(fullPath)
-				if os.IsNotExist(err) {
-					t.Errorf("File with ID %d not created", ID)
-				} else {
-					file, err := os.OpenFile(fullPath, os.O_RDONLY, 0644)
-					if err != nil {
-						t.Errorf("File with ID %d could not be opened", ID)
-					} else {
-						func() {
-							defer file.Close()
+			// clearing test data
+			err = os.RemoveAll(fmt.Sprintf("%s/", testBasePath))
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
 
-							var shouldEqualPost domain.Post
-							err = json.NewDecoder(file).Decode(&shouldEqualPost)
-							if err != nil {
-								t.Errorf("File with ID %d could not be decoded", ID)
-							} else {
-								assert.Equal(t, test.post, shouldEqualPost)
-							}
-						}()
-					}
+// Depends on working New
+//
+// Does not double SavePost cases, tests only slice managing
+func TestClient_SavePosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts *map[int]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: &map[int]domain.Post{},
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: &map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: &map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+				postID + 1: {
+					ID:        postID + 1,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo2},
+					Videos:    []domain.Video{video2},
+					Comments:  []domain.Comment{comment2},
+				},
+			},
+
+			expextedErr: nil,
+		},
+
+		// Errors cases
+		"nilSliceError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// saving multiple posts
+			gotErr := client.SavePosts(ctx, test.posts)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// validating saved posts
+			if gotErr == nil {
+				for _, post := range *test.posts {
+					validateSavedPost(t, post, post.ID)
 				}
 			}
 
@@ -649,3 +748,575 @@ func TestSavePost(t *testing.T) {
 		})
 	}
 }
+
+func validateSavedPost(t *testing.T, expectedPost domain.Post, id int) {
+	fullPath := fmt.Sprintf("%s/%s/%s/%d.json", testBasePath, testProvider, testAuthor, id)
+
+	_, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
+		t.Errorf("File with ID %d not created", id)
+	} else {
+		file, err := os.OpenFile(fullPath, os.O_RDONLY, 0644)
+		if err != nil {
+			t.Errorf("File with ID %d could not be opened", id)
+		} else {
+			func() {
+				defer file.Close()
+
+				var gotPost domain.Post
+				err = json.NewDecoder(file).Decode(&gotPost)
+				if err != nil {
+					t.Errorf("File with ID %d could not be decoded", id)
+				} else {
+					assert.Equal(t, expectedPost, gotPost)
+				}
+			}()
+		}
+	}
+}
+
+// Depends on working New, SavePost
+func TestClient_GetPost(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		post domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"postWithTextSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments:  []domain.Comment{},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithOnePhotoSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos: []domain.Photo{
+					photo1,
+				},
+				Videos:   []domain.Video{},
+				Comments: []domain.Comment{},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithOneVideoSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos: []domain.Video{
+					video1,
+				},
+				Comments: []domain.Comment{},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithManyPhotosSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos: []domain.Photo{
+					photo1,
+					photo2,
+				},
+				Videos:   []domain.Video{},
+				Comments: []domain.Comment{},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithManyVideoSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos: []domain.Video{
+					video1,
+					video2,
+				},
+				Comments: []domain.Comment{},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithOneCommentSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments: []domain.Comment{
+					comment1,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithManyCommentsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments: []domain.Comment{
+					comment1,
+					comment2,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithOneEveryAttachmentInCommentSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments: []domain.Comment{
+					commentWithOneEveryAttachment,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithManyEveryAttachmentInCommentSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments: []domain.Comment{
+					commentWithManyEveryAttachment,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"postWithCommentsThreadSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments: []domain.Comment{
+					thread,
+				},
+			},
+
+			expextedErr: nil,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// saving post to prepare test
+			err = client.SavePost(ctx, &test.post)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// getting post
+			gotPost, gotErr := client.GetPost(ctx, test.post.ID)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+			assert.Equal(t, test.post, gotPost)
+
+			// clearing test data
+			err = os.RemoveAll(fmt.Sprintf("%s/", testBasePath))
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost
+//
+// Does not double GetPost cases, tests only slice managing
+func TestClient_GetPosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]domain.Post),
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+				postID + 1: {
+					ID:        postID + 1,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo2},
+					Videos:    []domain.Video{video2},
+					Comments:  []domain.Comment{comment2},
+				},
+			},
+
+			expextedErr: nil,
+		},
+
+		// Errors cases
+		"nilSliceError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// saving posts to prepare test
+			for _, post := range test.posts {
+				err = client.SavePost(ctx, &post)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// preparing IDs slice
+			var postIDs []int = nil
+			if test.posts != nil {
+				postIDs = make([]int, 0, len(test.posts))
+				for _, post := range test.posts {
+					postIDs = append(postIDs, post.ID)
+				}
+			}
+
+			// getting multiple posts
+			gotPosts, gotErr := client.GetPosts(ctx, postIDs)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+			assert.Equal(t, test.posts, gotPosts)
+
+			// clearing test data
+			err = os.RemoveAll(fmt.Sprintf("%s/", testBasePath))
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost
+func TestClient_GetExistingPostIDs(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]domain.Post),
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				postID: {
+					ID:        postID,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo1},
+					Videos:    []domain.Video{video1},
+					Comments:  []domain.Comment{comment1},
+				},
+				postID + 1: {
+					ID:        postID + 1,
+					OwnerID:   ownerID,
+					CreatedAt: creationTime,
+					Views:     views,
+					Reactions: reactions,
+					Reposts:   reposts,
+					Text:      text,
+					Photos:    []domain.Photo{photo2},
+					Videos:    []domain.Video{video2},
+					Comments:  []domain.Comment{comment2},
+				},
+			},
+
+			expextedErr: nil,
+		},
+		// Errors cases
+		"authorNotFoundError": {
+			setupFunc: func() {
+				os.RemoveAll(fmt.Sprintf("%s/", testBasePath))
+			},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_AUTHOR_NOT_FOUND,
+		},
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// saving posts to prepare test
+			if test.posts != nil {
+				for _, post := range test.posts {
+					err = client.SavePost(ctx, &post)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+
+			// getting existing post IDs
+			gotPostIDs, gotErr := client.GetExistingPostIDs(ctx)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// validating got post IDs
+			var expectedPostIDs []int = nil
+			if test.posts != nil {
+				expectedPostIDs = make([]int, 0, len(test.posts))
+				for postID := range test.posts {
+					expectedPostIDs = append(expectedPostIDs, postID)
+				}
+			}
+			assert.Equal(t, expectedPostIDs, gotPostIDs)
+
+			// clearing test data
+			err = os.RemoveAll(fmt.Sprintf("%s/", testBasePath))
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
+}
+
+// Depends on working New, SavePost
+//
+// Does not double GetPost/GetPosts and GetExistingPostIDs cases, tests only all posts managing
+/*func TestClient_GetAllPosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]domain.Post
+
+		expextedErr error
+	}{}
+}
+*/
