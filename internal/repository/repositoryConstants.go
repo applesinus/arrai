@@ -17,8 +17,11 @@ var (
 	ERR_NO_LOGGER       = errors.New("no logger")
 	ERR_NO_APP_ENV      = errors.New("no app env")
 
-	ERR_POST_NOT_FOUND  = errors.New("post not found")
-	ERR_POST_EXISTS     = errors.New("post already exists")
-	ERR_PHOTO_EXISTS    = errors.New("photo already exists")
-	ERR_PHOTO_NOT_FOUND = errors.New("photo not found")
+	ERR_POST_NOT_FOUND   = errors.New("post not found")
+	ERR_POST_EXISTS      = errors.New("post already exists")
+	ERR_PHOTO_EXISTS     = errors.New("photo already exists")
+	ERR_PHOTO_NOT_FOUND  = errors.New("photo not found")
+	ERR_AUTHOR_NOT_FOUND = errors.New("author not found")
+
+	ERR_INVALID_ARGUMENT = errors.New("invalid argument")
 )

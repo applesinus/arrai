@@ -51,17 +51,17 @@ func New(logger *slog.Logger, appEnv *appEnv.AppEnv, providerName string, author
 		return nil, repository.ERR_EMPTY_AUTHOR
 	}
 
-	basePath := appEnv.MustGet(repository.BASE_PATH_ENV_KEY)
-	if basePath == "" {
-		return nil, repository.ERR_EMPTY_BASE_PATH
-	}
-
 	if logger == nil {
 		return nil, repository.ERR_NO_LOGGER
 	}
 
 	if appEnv == nil {
 		return nil, repository.ERR_NO_APP_ENV
+	}
+
+	basePath := appEnv.MustGet(repository.BASE_PATH_ENV_KEY)
+	if basePath == "" {
+		return nil, repository.ERR_EMPTY_BASE_PATH
 	}
 
 	diskRepo := &Client{
@@ -119,7 +119,7 @@ type haveAttachments interface {
 // SAVE
 
 // SavePost saves one post
-func (c *Client) SavePost(ctx context.Context, post domain.Post) error {
+func (c *Client) SavePost(ctx context.Context, post *domain.Post) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -129,15 +129,25 @@ func (c *Client) SavePost(ctx context.Context, post domain.Post) error {
 // SavePosts saves multiple posts to the disk repo
 //
 // Ranges over the slice and try to save each post. Not returning an error if one of them fails until the end
-func (c *Client) SavePosts(ctx context.Context, posts []domain.Post) error {
+//
+// Not returning an error if there is no posts in the slice
+func (c *Client) SavePosts(ctx context.Context, posts *map[int]domain.Post) error {
+	if posts == nil {
+		return repository.ERR_INVALID_ARGUMENT
+	}
+	if len(*posts) == 0 {
+		c.logger.Warn("Empty slice given to SavePosts")
+		return nil
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	var err error = nil
-	for _, post := range posts {
-		saveError := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
+	for id, post := range *posts {
+		saveError := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(id), &post)
 		if err != nil {
-			err = errors.Join(err, fmt.Errorf("post_%d", post.ID), saveError)
+			err = errors.Join(err, fmt.Errorf("post_%d", id), saveError)
 			continue
 		}
 	}
@@ -146,7 +156,7 @@ func (c *Client) SavePosts(ctx context.Context, posts []domain.Post) error {
 }
 
 // savePost saves one post to the disk repo
-func (c *Client) savePost(dirPath, filePath string, post domain.Post) error {
+func (c *Client) savePost(dirPath, filePath string, post *domain.Post) error {
 	if post.ID == -1 {
 		return domain.ERROR_NO_POST_ID
 	}
@@ -161,7 +171,7 @@ func (c *Client) savePost(dirPath, filePath string, post domain.Post) error {
 	}
 
 	// saving all attachments including attachments in comments recursively
-	err = saveAttachments(c, fmt.Sprintf("%s/%d", dirPath, post.ID), &[]domain.Post{post})
+	err = saveAttachments(c, fmt.Sprintf("%s/%d", dirPath, post.ID), &[]domain.Post{*post})
 	if err != nil {
 		if errors.Is(err, ERR_NO_ENTITIES_GIVEN) {
 			c.logger.Warn(err.Error(),
@@ -381,20 +391,28 @@ func (c *Client) GetPost(ctx context.Context, postID int) (domain.Post, error) {
 //
 // Ranges over the slice and try to get each post. Not returning an error if one of them fails until the end
 func (c *Client) GetPosts(ctx context.Context, postIDs []int) (map[int]domain.Post, error) {
+	if postIDs == nil {
+		return nil, repository.ERR_INVALID_ARGUMENT
+	}
+	if len(postIDs) == 0 {
+		c.logger.Warn("Empty slice given to GetPosts")
+		return make(map[int]domain.Post, 0), nil
+	}
+
 	posts := make(map[int]domain.Post, len(postIDs))
 	var err error = nil
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for i, postID := range postIDs {
+	for _, postID := range postIDs {
 		post, getError := c.getPost(c.buildPostFilePath(postID))
 		if err != nil {
 			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
 			continue
 		}
 
-		posts[i] = post
+		posts[postID] = post
 	}
 
 	return posts, err
@@ -560,35 +578,6 @@ func (c *Client) readFile(dirPath, filename string) ([]byte, error) {
 
 // GET all
 
-// GetAllPosts returns all posts
-//
-// Ranges over the slice and try to get each post. Not returning an error if one of them fails until the end
-func (c *Client) GetAllPosts(ctx context.Context) ([]domain.Post, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	var err error = nil
-
-	postIDs, err := c.getExistingPostIDs(c.buildAuthorPath())
-	if err != nil {
-		return nil, err
-	}
-
-	posts := make([]domain.Post, 0, len(postIDs))
-
-	for _, postID := range postIDs {
-		post, getError := c.getPost(c.buildPostFilePath(postID))
-		if err != nil {
-			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
-			continue
-		}
-
-		posts = append(posts, post)
-	}
-
-	return posts, nil
-}
-
 // GetExistingPostIDs returns all existing post ids
 //
 // Ranges over the database and try to get each filename. Not returning an error if one of them fails until the end.
@@ -604,7 +593,7 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	postIDs := make([]int, 0)
 
 	if !c.isPathExist(dirPath) {
-		return postIDs, nil
+		return nil, repository.ERR_AUTHOR_NOT_FOUND
 	}
 
 	files, err := os.ReadDir(dirPath)
@@ -614,6 +603,11 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 
 	for _, file := range files {
 		filename := file.Name()
+
+		// check if it's a post file, not a directory with attachments
+		if !strings.HasSuffix(filename, ".json") {
+			continue
+		}
 
 		id, parseErr := strconv.Atoi(strings.TrimSuffix(filename, ".json"))
 		if parseErr != nil {
@@ -625,6 +619,42 @@ func (c *Client) getExistingPostIDs(dirPath string) ([]int, error) {
 	}
 
 	return postIDs, err
+}
+
+// GetAllPosts returns all posts
+//
+// Ranges over the database and try to get every post. Returning a combined error in the end of the range
+func (c *Client) GetAllPosts(ctx context.Context) (map[int]domain.Post, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var err error = nil
+
+	postIDs, err := c.getExistingPostIDs(c.buildAuthorPath())
+	if err != nil {
+		if postIDs == nil {
+			return nil, err
+		}
+
+		c.logger.Warn("Errors while getting existing post ids",
+			"err", err,
+			"got_ids", postIDs,
+		)
+	}
+
+	posts := make(map[int]domain.Post, len(postIDs))
+
+	for _, postID := range postIDs {
+		post, getError := c.getPost(c.buildPostFilePath(postID))
+		if err != nil {
+			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
+			continue
+		}
+
+		posts[postID] = post
+	}
+
+	return posts, nil
 }
 
 // UPDATE
@@ -640,13 +670,27 @@ func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
 // UpdatePosts updates multiple posts
 //
 // Ranges over the slice and try to update each post. Returning a combined error in the end of the range
-func (c *Client) UpdatePosts(ctx context.Context, posts []domain.Post) error {
+func (c *Client) UpdatePosts(ctx context.Context, posts map[int]domain.Post) error {
 	var err error = nil
 
-	for _, post := range posts {
-		updateErr := c.updatePost(c.buildPostFilePath(post.ID), post)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for id, post := range posts {
+		// TODO file updates
+		for i := range post.Photos {
+			post.Photos[i].Self.Content = nil
+			post.Photos[i].Preview.Content = nil
+		}
+		for i := range post.Videos {
+			post.Videos[i].Content = nil
+			post.Videos[i].Preview.Content = nil
+		}
+		// END TODO
+
+		updateErr := c.updatePost(c.buildPostFilePath(id), post)
 		if err != nil {
-			err = errors.Join(err, fmt.Errorf("post_%d", post.ID), updateErr)
+			err = errors.Join(err, fmt.Errorf("post_%d", id), updateErr)
 			continue
 		}
 	}
@@ -655,11 +699,11 @@ func (c *Client) UpdatePosts(ctx context.Context, posts []domain.Post) error {
 }
 
 // UpdateOrSavePost updates a post if it exists, otherwise saves it
-func (c *Client) UpdateOrSavePost(ctx context.Context, post domain.Post) error {
+func (c *Client) UpdateOrSavePost(ctx context.Context, post *domain.Post) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	err := c.updatePost(c.buildPostFilePath(post.ID), post)
+	err := c.updatePost(c.buildPostFilePath(post.ID), *post)
 	if err != nil {
 		if err == repository.ERR_POST_NOT_FOUND {
 			return c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
@@ -672,17 +716,17 @@ func (c *Client) UpdateOrSavePost(ctx context.Context, post domain.Post) error {
 // UpdateOrSavePosts updates a post if it exists, otherwise saves it
 //
 // Ranges over the slice and try to update or save each post. Returning a combined error in the end of the range
-func (c *Client) UpdateOrSavePosts(posts []domain.Post) error {
+func (c *Client) UpdateOrSavePosts(posts *map[int]domain.Post) error {
 	var err error = nil
 
-	for _, post := range posts {
-		updateErr := c.updatePost(c.buildPostFilePath(post.ID), post)
+	for id, post := range *posts {
+		updateErr := c.updatePost(c.buildPostFilePath(id), post)
 		if updateErr != nil {
 			if updateErr == repository.ERR_POST_NOT_FOUND {
-				saveErr := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(post.ID), post)
+				saveErr := c.savePost(c.buildAuthorPath(), c.buildPostFilePath(id), &post)
 
 				if saveErr != nil {
-					err = errors.Join(err, fmt.Errorf("post_%d", post.ID), updateErr, saveErr)
+					err = errors.Join(err, fmt.Errorf("post_%d", id), updateErr, saveErr)
 					continue
 				}
 			}
@@ -720,6 +764,26 @@ func (c *Client) DeletePost(ctx context.Context, postID int) error {
 	defer c.mu.Unlock()
 
 	return c.deletePost(postID)
+}
+
+// DeletePosts deletes multiple posts
+//
+// Ranges over the slice and try to delete each post. Returning a combined error in the end of the range
+func (c *Client) DeletePosts(ctx context.Context, postIDs []int) error {
+	var err error = nil
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	for _, postID := range postIDs {
+		deleteErr := c.deletePost(postID)
+		if err != nil {
+			err = errors.Join(err, fmt.Errorf("post_%d", postID), deleteErr)
+			continue
+		}
+	}
+
+	return err
 }
 
 // deletePost deletes one post hardly removing a file and a corresponding directory of attachments if it exists from disk

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"arrai/config/appEnv"
+	"arrai/internal/domain"
 	"arrai/internal/provider"
 	"arrai/internal/provider/vk"
 	"arrai/internal/repository"
@@ -87,8 +88,8 @@ func main() {
 	}()
 	go timer(ctx, logger, wg, startTime)
 
-	// Get posts using API
-	posts, err := client.GetPosts(ctx, authorID)
+	// Get postsSlc using API
+	postsSlc, err := client.GetPosts(ctx, authorID)
 	if err != nil {
 		logger.Error("failed to get posts",
 			"error", err,
@@ -97,19 +98,23 @@ func main() {
 	} else {
 		logger.Info("Posts fetched from VK API",
 			"author_id", authorID,
-			"posts_count", len(*posts),
+			"posts_count", len(*postsSlc),
 		)
 
 		logger.Debug("First post",
-			"text", (*posts)[0].Text,
+			"text", (*postsSlc)[0].Text,
 		)
+	}
+	posts := make(map[int]domain.Post, len(*postsSlc))
+	for _, post := range *postsSlc {
+		posts[post.ID] = post
 	}
 
 	// Save posts to repository
 	if debugMode {
 		defer repo.Clear(ctx)
 
-		err := repo.SavePost(ctx, (*posts)[0])
+		err := repo.SavePost(ctx, &(*postsSlc)[0])
 		if err != nil {
 			logger.Error("failed to save posts to repository",
 				"error", err,
@@ -118,7 +123,7 @@ func main() {
 		}
 
 		logger.Debug("First post saved to repository",
-			"post_id", (*posts)[0].ID,
+			"post_id", (*postsSlc)[0].ID,
 		)
 
 		postIDs, err := repo.GetExistingPostIDs(ctx)
@@ -148,7 +153,7 @@ func main() {
 		scanner.Scan()
 	} else {
 		logger.Info("Saving posts to repository")
-		repo.SavePosts(ctx, *posts)
+		repo.SavePosts(ctx, &posts)
 		logger.Info("Posts are saved to repository")
 	}
 }
