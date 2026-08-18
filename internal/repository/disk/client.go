@@ -161,6 +161,23 @@ func (c *Client) savePost(dirPath, filePath string, post *domain.Post) error {
 		return domain.ERROR_NO_POST_ID
 	}
 	if c.isPathExist(filePath) {
+		files, err := os.ReadDir(dirPath)
+		if err != nil {
+			return err
+		}
+
+		filenames := make([]string, 0)
+		for _, file := range files {
+			filenames = append(filenames, file.Name())
+		}
+
+		c.logger.Warn("Post already exists",
+			"post_id", post.ID,
+			"path", filePath,
+			"files", filenames,
+			"dir_path", dirPath,
+			"file_path", filePath,
+		)
 		return repository.ERR_POST_EXISTS
 	}
 
@@ -644,9 +661,10 @@ func (c *Client) GetAllPosts(ctx context.Context) (map[int]domain.Post, error) {
 
 	posts := make(map[int]domain.Post, len(postIDs))
 
+	err = nil
 	for _, postID := range postIDs {
 		post, getError := c.getPost(c.buildPostFilePath(postID))
-		if err != nil {
+		if getError != nil {
 			err = errors.Join(err, fmt.Errorf("post_%d", postID), getError)
 			continue
 		}
@@ -654,7 +672,7 @@ func (c *Client) GetAllPosts(ctx context.Context) (map[int]domain.Post, error) {
 		posts[postID] = post
 	}
 
-	return posts, nil
+	return posts, err
 }
 
 // UPDATE
@@ -677,17 +695,6 @@ func (c *Client) UpdatePosts(ctx context.Context, posts map[int]domain.Post) err
 	defer c.mu.Unlock()
 
 	for id, post := range posts {
-		// TODO file updates
-		for i := range post.Photos {
-			post.Photos[i].Self.Content = nil
-			post.Photos[i].Preview.Content = nil
-		}
-		for i := range post.Videos {
-			post.Videos[i].Content = nil
-			post.Videos[i].Preview.Content = nil
-		}
-		// END TODO
-
 		updateErr := c.updatePost(c.buildPostFilePath(id), post)
 		if err != nil {
 			err = errors.Join(err, fmt.Errorf("post_%d", id), updateErr)
@@ -746,6 +753,8 @@ func (c *Client) updatePost(filePath string, post domain.Post) error {
 		return err
 	}
 	defer file.Close()
+
+	file.Truncate(0)
 
 	jsonBytes, err := json.MarshalIndent(post, "", "  ")
 	if err != nil {
