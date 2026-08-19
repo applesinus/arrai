@@ -2161,8 +2161,8 @@ func testSetup(t *testing.T) (context.Context, *slog.Logger, *appEnv.AppEnv) {
 
 func createMockPhoto(ID string) domain.Photo {
 	return domain.Photo{
-		Self:    createMockPicture(fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
-		Preview: createMockPicture(fmt.Sprintf("%s_%s", previewPreffix, ID)),
+		Original: createMockPicture(fmt.Sprintf("%s_%s", photoSelfPreffix, ID)),
+		Preview:  createMockPicture(fmt.Sprintf("%s_%s", previewPreffix, ID)),
 	}
 }
 

@@ -215,7 +215,7 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 
 func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.Photo) error {
 	for i := range *photos {
-		photo, err := c.downloadPhoto(ctx, (*photos)[i].Self.Url)
+		photo, err := c.downloadPhoto(ctx, (*photos)[i].Original.Url)
 		if err != nil {
 			return err
 		}
@@ -223,7 +223,7 @@ func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.Photo) error {
 		preview := photo
 		previewUrl := (*photos)[i].Preview.Url
 
-		if previewUrl != (*photos)[i].Self.Url {
+		if previewUrl != (*photos)[i].Original.Url {
 			preview, err = c.downloadPhoto(ctx, previewUrl)
 			if err != nil {
 				c.logger.Error("Cannot download small size photo, using big size copy instead",
@@ -232,11 +232,11 @@ func (c *Client) fillPhotos(ctx context.Context, photos *[]domain.Photo) error {
 				)
 
 				preview = photo
-				previewUrl = (*photos)[i].Self.Url
+				previewUrl = (*photos)[i].Original.Url
 			}
 		}
 
-		(*photos)[i].Self.Content = photo
+		(*photos)[i].Original.Content = photo
 		(*photos)[i].Preview.Content = preview
 		(*photos)[i].Preview.Url = previewUrl
 	}

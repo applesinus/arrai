@@ -280,7 +280,7 @@ func saveAttachments[T haveAttachments](repoClient *Client, dirPath string, enti
 				}
 
 				// updating the original struct to contain filenames
-				(*photos)[j].Self.Filename = photoFilename
+				(*photos)[j].Original.Filename = photoFilename
 				(*photos)[j].Preview.Filename = previewFilename
 
 				//(*photos)[j].Self.Content = []byte{}
@@ -361,7 +361,7 @@ func (c *Client) savePhoto(dirPath, photoFilename, previewFilename string, photo
 	if c.isPathExist(fmt.Sprintf("%s/%s", dirPath, photoFilename)) {
 		return fmt.Errorf("%s for %s", repository.ERR_PHOTO_EXISTS.Error(), photoFilename)
 	}
-	err := c.savePicture(dirPath, photoFilename, photo.Self)
+	err := c.savePicture(dirPath, photoFilename, photo.Original)
 	if err != nil {
 		return err
 	}
@@ -564,11 +564,11 @@ func (c *Client) fillVideo(dirPath string, video *domain.Video) error {
 //
 // it works with an existing photo and modifies it in-place
 func (c *Client) fillPhoto(dirPath string, photo *domain.Photo) error {
-	photoItself, err := c.readFile(dirPath, photo.Self.Filename)
+	photoItself, err := c.readFile(dirPath, photo.Original.Filename)
 	if err != nil {
 		return err
 	}
-	photo.Self.Content = photoItself
+	photo.Original.Content = photoItself
 
 	photoPreview, err := c.readFile(dirPath, photo.Preview.Filename)
 	if err != nil {

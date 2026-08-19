@@ -41,8 +41,8 @@ type Comment struct {
 }
 
 type Photo struct {
-	Self    Picture `json:"photo"`
-	Preview Picture `json:"preview"`
+	Original Picture `json:"photo"`
+	Preview  Picture `json:"preview"`
 }
 
 type Picture struct {

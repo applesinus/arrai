@@ -137,7 +137,7 @@ func (c vkComment) toDomain(logger slog.Logger, wallAuthorID int) (domain.Commen
 	}, nil
 }
 
-// Support functions
+// SUPPORT FUNCTIONS
 
 func creationTimeOrDefault(creationTime *int) time.Time {
 	returnInt := domain.PLACEHOLDER_TIME
@@ -188,7 +188,7 @@ func parseAttachments(logger slog.Logger, attachments []Attachment, parentID int
 				}
 
 				photos = append(photos, domain.Photo{
-					Self: domain.Picture{
+					Original: domain.Picture{
 						Url: parseUrl(*attachment.Photo.OrigPhoto.Url),
 					},
 					Preview: domain.Picture{
