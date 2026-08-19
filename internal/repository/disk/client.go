@@ -677,7 +677,9 @@ func (c *Client) GetAllPosts(ctx context.Context) (map[int]domain.Post, error) {
 
 // UPDATE
 
-// UpdatePost updates one post
+// UpdatePost updates one post.
+//
+// It does not create a new post if it doesn't exist. If you want this behavior, use UpdateOrSavePost instead
 func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -688,7 +690,17 @@ func (c *Client) UpdatePost(ctx context.Context, post domain.Post) error {
 // UpdatePosts updates multiple posts
 //
 // Ranges over the slice and try to update each post. Returning a combined error in the end of the range
+//
+// It does not create new posts if they don't exist. If you want this behavior, use UpdateOrSavePost instead
 func (c *Client) UpdatePosts(ctx context.Context, posts map[int]domain.Post) error {
+	if posts == nil {
+		return repository.ERR_INVALID_ARGUMENT
+	}
+	if len(posts) == 0 {
+		c.logger.Warn("Empty slice given to UpdatePosts")
+		return nil
+	}
+
 	var err error = nil
 
 	c.mu.Lock()
@@ -707,6 +719,10 @@ func (c *Client) UpdatePosts(ctx context.Context, posts map[int]domain.Post) err
 
 // UpdateOrSavePost updates a post if it exists, otherwise saves it
 func (c *Client) UpdateOrSavePost(ctx context.Context, post *domain.Post) error {
+	if post == nil {
+		return repository.ERR_INVALID_ARGUMENT
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -724,6 +740,14 @@ func (c *Client) UpdateOrSavePost(ctx context.Context, post *domain.Post) error 
 //
 // Ranges over the slice and try to update or save each post. Returning a combined error in the end of the range
 func (c *Client) UpdateOrSavePosts(posts *map[int]domain.Post) error {
+	if posts == nil {
+		return repository.ERR_INVALID_ARGUMENT
+	}
+	if len(*posts) == 0 {
+		c.logger.Warn("Empty slice given to UpdateOrSavePosts")
+		return nil
+	}
+
 	var err error = nil
 
 	for id, post := range *posts {
@@ -779,6 +803,14 @@ func (c *Client) DeletePost(ctx context.Context, postID int) error {
 //
 // Ranges over the slice and try to delete each post. Returning a combined error in the end of the range
 func (c *Client) DeletePosts(ctx context.Context, postIDs []int) error {
+	if postIDs == nil {
+		return repository.ERR_INVALID_ARGUMENT
+	}
+	if len(postIDs) == 0 {
+		c.logger.Warn("Empty slice given to DeletePosts")
+		return nil
+	}
+
 	var err error = nil
 
 	c.mu.Lock()
@@ -803,7 +835,7 @@ func (c *Client) deletePost(postID int) error {
 
 	var err error = nil
 	if c.isPathExist(c.buildPostAttachmentsDirPath(postID)) {
-		err = os.Remove(c.buildPostAttachmentsDirPath(postID))
+		err = os.RemoveAll(c.buildPostAttachmentsDirPath(postID))
 	}
 
 	return errors.Join(err, os.Remove(c.buildPostFilePath(postID)))
@@ -811,7 +843,7 @@ func (c *Client) deletePost(postID int) error {
 
 // CLEAR
 
-// Clear deletes all posts
+// Clear deletes all posts in the author's directory
 func (c *Client) Clear(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

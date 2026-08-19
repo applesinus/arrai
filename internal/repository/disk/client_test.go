@@ -151,6 +151,18 @@ var (
 		Videos:    []domain.Video{video2},
 		Comments:  []domain.Comment{comment2},
 	}
+	post2Changed = domain.Post{
+		ID:        postID + 1,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Views:     views + 1,
+		Reactions: reactions + 1,
+		Reposts:   reposts + 1,
+		Text:      text + "1",
+		Photos:    []domain.Photo{photo2},
+		Videos:    []domain.Video{video2},
+		Comments:  []domain.Comment{comment2},
+	}
 )
 
 // updateStatus type
@@ -660,7 +672,7 @@ func TestClient_SavePosts(t *testing.T) {
 		},
 
 		// Errors cases
-		"nilSliceError": {
+		"nilMapError": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -1033,7 +1045,7 @@ func TestClient_GetPosts(t *testing.T) {
 		},
 
 		// Errors cases
-		"nilSliceError": {
+		"nilMapError": {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
@@ -1274,6 +1286,848 @@ func TestClient_GetAllPosts(t *testing.T) {
 			assert.ErrorIs(t, gotErr, test.expextedErr)
 			assert.Equal(t, test.posts, gotPosts)
 		})
+	}
+}
+
+// Depends on working New, SavePost, GetPost
+func TestClient_UpdatePost(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		post map[updateStatus]domain.Post
+		//posts map[int]map[update]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noChangesSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				old: post1,
+				new: post1,
+			},
+
+			expextedErr: nil,
+		},
+		"changesSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				old: post1,
+				new: post1Changed,
+			},
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"authorNotFoundError": {
+			setupFunc: func() {
+				os.RemoveAll(fmt.Sprintf("%s/", env.MustGet(repository.BASE_PATH_ENV_KEY)))
+			},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				old: post1,
+				new: post1,
+			},
+
+			expextedErr: repository.ERR_POST_NOT_FOUND,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving post to prepare test
+			if test.post != nil {
+				postCopy := test.post[old]
+				err = client.SavePost(ctx, &postCopy)
+				if err != nil {
+					t.Logf("Error on saving post: %v", err)
+					t.Fatal(err)
+				}
+
+				// TODO change attachments (and comments)
+				newPostCopy := test.post[new]
+				newPostCopy.Photos = postCopy.Photos
+				newPostCopy.Videos = postCopy.Videos
+				newPostCopy.Comments = postCopy.Comments
+				test.post[new] = newPostCopy
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// updating post
+			gotErr := client.UpdatePost(ctx, test.post[new])
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// getting updated post
+			if test.expextedErr != repository.ERR_POST_NOT_FOUND {
+				validateUpdatedPost(ctx, t, client, test.post[new])
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost, GetPost, UpdatePost
+//
+// Does not double UpdatePost cases, tests only slice managing
+func TestClient_UpdatePosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]map[updateStatus]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]map[updateStatus]domain.Post),
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]map[updateStatus]domain.Post{
+				post1.ID: {
+					old: post1,
+					new: post1Changed,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]map[updateStatus]domain.Post{
+				post1.ID: {
+					old: post1,
+					new: post1Changed,
+				},
+				post2.ID: {
+					old: post2,
+					new: post2Changed,
+				},
+			},
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"nilMapError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving posts to prepare test
+			if test.posts != nil {
+				postsToSave := make(map[int]domain.Post, len(test.posts))
+				for id, postMap := range test.posts {
+					postsToSave[id] = postMap[old]
+				}
+
+				err = client.SavePosts(ctx, &postsToSave)
+				if err != nil {
+					t.Logf("Error on saving posts: %v", err)
+					t.Fatal(err)
+				}
+
+				// TODO change attachments (and comments)
+				for id, postMap := range test.posts {
+					savedPost := postsToSave[id]
+					newPostCopy := postMap[new]
+					newPostCopy.Photos = savedPost.Photos
+					newPostCopy.Videos = savedPost.Videos
+					newPostCopy.Comments = savedPost.Comments
+					test.posts[id][new] = newPostCopy
+				}
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// preparing map of updated posts
+			var postsToUpdate map[int]domain.Post = nil
+			if test.posts != nil {
+				postsToUpdate = make(map[int]domain.Post, len(test.posts))
+				for id, postMap := range test.posts {
+					postsToUpdate[id] = postMap[new]
+				}
+			}
+
+			// updating posts
+			gotErr := client.UpdatePosts(ctx, postsToUpdate)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// getting updated posts
+			if test.expextedErr != repository.ERR_POST_NOT_FOUND {
+				for _, postMap := range test.posts {
+					validateUpdatedPost(ctx, t, client, postMap[new])
+				}
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost, GetPost, UpdatePost
+func TestClient_UpdateOrSavePost(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		post map[updateStatus]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"saveNewPostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				new: post1,
+			},
+
+			expextedErr: nil,
+		},
+		"noChangesUpdateSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				old: post1,
+				new: post1,
+			},
+
+			expextedErr: nil,
+		},
+		"changesUpdateSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{
+				old: post1,
+				new: post1Changed,
+			},
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"nilValueError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: map[updateStatus]domain.Post{},
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving post to prepare test
+			if postCopy, ok := test.post[old]; ok {
+				err = client.SavePost(ctx, &postCopy)
+				if err != nil {
+					t.Logf("Error on saving post: %v", err)
+					t.Fatal(err)
+				}
+
+				// TODO change attachments (and comments)
+				newPostCopy := test.post[new]
+				newPostCopy.Photos = postCopy.Photos
+				newPostCopy.Videos = postCopy.Videos
+				newPostCopy.Comments = postCopy.Comments
+				test.post[new] = newPostCopy
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// updating or saving post
+			var postToUpdateOrSave *domain.Post = nil
+			if postInTest, ok := test.post[new]; ok {
+				postToUpdateOrSave = &postInTest
+			}
+
+			gotErr := client.UpdateOrSavePost(ctx, postToUpdateOrSave)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// getting updated or saved post
+			if gotErr == nil {
+				validateUpdatedPost(ctx, t, client, *postToUpdateOrSave)
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost, GetPost, UpdatePost, UpdateOrSavePost
+//
+// Does not double UpdateOrSavePost cases, tests only slice managing
+func TestClient_UpdateOrSavePosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]map[updateStatus]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]map[updateStatus]domain.Post),
+
+			expextedErr: nil,
+		},
+		"saveNewPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]map[updateStatus]domain.Post{
+				post1.ID: {
+					new: post1,
+				},
+				post2.ID: {
+					new: post2,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"updateExistingPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]map[updateStatus]domain.Post{
+				post1.ID: {
+					old: post1,
+					new: post1Changed,
+				},
+				post2.ID: {
+					old: post2,
+					new: post2Changed,
+				},
+			},
+
+			expextedErr: nil,
+		},
+		"mixedUpdateAndSaveSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]map[updateStatus]domain.Post{
+				post1.ID: {
+					old: post1,
+					new: post1Changed,
+				},
+				post2.ID: {
+					new: post2,
+				},
+			},
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"nilMapError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving posts to prepare test
+			if test.posts != nil {
+				postsToSave := make(map[int]domain.Post, len(test.posts))
+				for id, postMap := range test.posts {
+					if postCopy, ok := postMap[old]; ok {
+						postsToSave[id] = postCopy
+					}
+				}
+
+				if len(postsToSave) > 0 {
+					err = client.SavePosts(ctx, &postsToSave)
+					if err != nil {
+						t.Logf("Error on saving posts: %v", err)
+						t.Fatal(err)
+					}
+
+					// TODO change attachments (and comments)
+					for id, postMap := range test.posts {
+						if savedPost, ok := postsToSave[id]; ok {
+							newPostCopy := postMap[new]
+							newPostCopy.Photos = savedPost.Photos
+							newPostCopy.Videos = savedPost.Videos
+							newPostCopy.Comments = savedPost.Comments
+							test.posts[id][new] = newPostCopy
+						}
+					}
+				}
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// preparing map of updated or saved posts
+			var postsToUpdateOrSave *map[int]domain.Post = nil
+			if test.posts != nil {
+				postsMap := make(map[int]domain.Post, len(test.posts))
+				for id, postMap := range test.posts {
+					postsMap[id] = postMap[new]
+				}
+				postsToUpdateOrSave = &postsMap
+			}
+
+			// updating or saving posts
+			gotErr := client.UpdateOrSavePosts(postsToUpdateOrSave)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// getting updated or saved posts
+			if test.posts != nil {
+				for _, postMap := range test.posts {
+					validateUpdatedPost(ctx, t, client, postMap[new])
+				}
+			}
+		})
+	}
+}
+
+func validateUpdatedPost(ctx context.Context, t *testing.T, client repository.Repository, expectedPost domain.Post) {
+	gotPost, gotErr := client.GetPost(ctx, expectedPost.ID)
+	if gotErr != nil {
+		t.Fatal(gotErr)
+	}
+	assert.Equal(t, expectedPost, gotPost)
+}
+
+// Depends on working New, SavePost, GetPost
+func TestClient_DeletePost(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		post     *domain.Post
+		deleteID int
+
+		expextedErr error
+	}{
+		// Success cases
+		"postWithTextSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post: &domain.Post{
+				ID:        postID,
+				OwnerID:   ownerID,
+				CreatedAt: creationTime,
+				Views:     views,
+				Reactions: reactions,
+				Reposts:   reposts,
+				Text:      text,
+				Photos:    []domain.Photo{},
+				Videos:    []domain.Video{},
+				Comments:  []domain.Comment{},
+			},
+			deleteID: postID,
+
+			expextedErr: nil,
+		},
+		"postWithAttachmentsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post:     &post1,
+			deleteID: post1.ID,
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"postNotFoundError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			post:     nil,
+			deleteID: postID,
+
+			expextedErr: repository.ERR_POST_NOT_FOUND,
+		},
+		"authorNotFoundError": {
+			setupFunc: func() {
+				os.RemoveAll(fmt.Sprintf("%s/", env.MustGet(repository.BASE_PATH_ENV_KEY)))
+			},
+			teardownFunc: func() {},
+
+			post:     nil,
+			deleteID: postID,
+
+			expextedErr: repository.ERR_POST_NOT_FOUND,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving post to prepare test
+			if test.post != nil {
+				postCopy := *test.post
+				err = client.SavePost(ctx, &postCopy)
+				if err != nil {
+					t.Logf("Error on saving post: %v", err)
+					t.Fatal(err)
+				}
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// deleting post
+			gotErr := client.DeletePost(ctx, test.deleteID)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// validating deleted post
+			if gotErr == nil {
+				validateDeletedPost(ctx, t, client, *env, test.deleteID)
+			}
+		})
+	}
+}
+
+// Depends on working New, SavePost, GetPost, DeletePost
+//
+// Does not double DeletePost cases, tests only slice managing
+func TestClient_DeletePosts(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]domain.Post),
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				post1.ID: post1,
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				post1.ID: post1,
+				post2.ID: post2,
+			},
+
+			expextedErr: nil,
+		},
+
+		// Error cases
+		"nilMapError": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: repository.ERR_INVALID_ARGUMENT,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// saving posts to prepare test
+			if test.posts != nil {
+				err = client.SavePosts(ctx, &test.posts)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// preparing IDs slice
+			var postIDs []int = nil
+			if test.posts != nil {
+				postIDs = make([]int, 0, len(test.posts))
+				for _, post := range test.posts {
+					postIDs = append(postIDs, post.ID)
+				}
+			}
+
+			// deleting multiple posts
+			gotErr := client.DeletePosts(ctx, postIDs)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// validating deleted posts
+			if test.posts != nil {
+				for _, post := range test.posts {
+					validateDeletedPost(ctx, t, client, *env, post.ID)
+				}
+			}
+		})
+	}
+}
+
+func validateDeletedPost(ctx context.Context, t *testing.T, client repository.Repository, env appEnv.AppEnv, id int) {
+	_, gotErr := client.GetPost(ctx, id)
+	assert.ErrorIs(t, gotErr, repository.ERR_POST_NOT_FOUND)
+
+	fullPath := fmt.Sprintf("%s/%s/%s/%d.json", env.MustGet(repository.BASE_PATH_ENV_KEY), testProvider, testAuthor, id)
+	_, err := os.Stat(fullPath)
+	if !os.IsNotExist(err) {
+		t.Errorf("File with ID %d was not deleted", id)
+	}
+
+	attachmentsDirPath := fmt.Sprintf("%s/%s/%s/%d", env.MustGet(repository.BASE_PATH_ENV_KEY), testProvider, testAuthor, id)
+	_, err = os.Stat(attachmentsDirPath)
+	if !os.IsNotExist(err) {
+		t.Errorf("Attachments directory for post %d was not deleted", id)
+	}
+}
+
+// Depends on working New, SavePost, GetPost, DeletePost
+func TestClient_Clear(t *testing.T) {
+	ctx, logger, env := testSetup(t)
+
+	// Test cases
+	testsTable := map[string]struct {
+		setupFunc    func()
+		teardownFunc func()
+
+		posts map[int]domain.Post
+
+		expextedErr error
+	}{
+		// Success cases
+		"noPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: make(map[int]domain.Post),
+
+			expextedErr: nil,
+		},
+		"onePostSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				post1.ID: post1,
+			},
+
+			expextedErr: nil,
+		},
+		"manyPostsSuccess": {
+			setupFunc:    func() {},
+			teardownFunc: func() {},
+
+			posts: map[int]domain.Post{
+				post1.ID: post1,
+				post2.ID: post2,
+			},
+
+			expextedErr: nil,
+		},
+		"authorDirNotExistSuccess": {
+			setupFunc: func() {
+				os.RemoveAll(fmt.Sprintf("%s/", env.MustGet(repository.BASE_PATH_ENV_KEY)))
+			},
+			teardownFunc: func() {},
+
+			posts: nil,
+
+			expextedErr: nil,
+		},
+
+		// TODO fail cases
+		// TODO concurrency cases
+	}
+
+	for testName, test := range testsTable {
+		t.Run(testName, func(t *testing.T) {
+			// clearing test data after each test
+			t.Cleanup(func() {
+				clearTestData(t, env.MustGet(repository.BASE_PATH_ENV_KEY))
+			})
+
+			client, err := disk.New(logger, env, testProvider, testAuthor)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// saving posts to prepare test
+			if test.posts != nil {
+				err = client.SavePosts(ctx, &test.posts)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			test.setupFunc()
+			defer test.teardownFunc()
+
+			// clearing database
+			gotErr := client.Clear(ctx)
+			assert.ErrorIs(t, gotErr, test.expextedErr)
+
+			// validating cleared repository
+			if gotErr == nil {
+				validateCleared(ctx, t, client, *env, test.posts)
+			}
+		})
+	}
+}
+
+func validateCleared(ctx context.Context, t *testing.T, client repository.Repository, env appEnv.AppEnv, posts map[int]domain.Post) {
+	authorDirPath := fmt.Sprintf("%s/%s/%s", env.MustGet(repository.BASE_PATH_ENV_KEY), testProvider, testAuthor)
+	_, err := os.Stat(authorDirPath)
+	if !os.IsNotExist(err) {
+		t.Errorf("Author directory %s was not deleted", authorDirPath)
+	}
+
+	if posts != nil {
+		for _, post := range posts {
+			validateDeletedPost(ctx, t, client, env, post.ID)
+		}
 	}
 }
 
