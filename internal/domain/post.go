@@ -43,6 +43,9 @@ type Comment struct {
 type Photo struct {
 	Original Picture `json:"photo"`
 	Preview  Picture `json:"preview"`
+
+	// TODO generation summary via I2T API interface
+	// Summary string `json:"summary"`
 }
 
 type Picture struct {
