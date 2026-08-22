@@ -436,6 +436,8 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 }
 
 func (c *Client) fillStats(ctx context.Context, post *domain.Post) error {
+	post.Stats = EmptyPostStats.toDomain(post.Stats)
+
 	resp, err := c.doVkApiRequest(ctx, METHOD_GET_POST_STATS, map[string]any{
 		"owner_id": post.OwnerID,
 		"post_ids": post.ID,

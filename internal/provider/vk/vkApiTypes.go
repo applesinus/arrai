@@ -170,6 +170,15 @@ func (c vkPostStats) toDomain(stats domain.PostStats) domain.PostStats {
 	}
 }
 
+var EmptyPostStats = vkPostStats{
+	ReachTotal:       -1,
+	ReachSubscribers: -1,
+	ToGroup:          -1,
+	JoinGroup:        -1,
+	Unsubscribe:      -1,
+	Hide:             -1,
+}
+
 // SUPPORT FUNCTIONS
 
 func creationTimeOrDefault(creationTime *int) time.Time {
