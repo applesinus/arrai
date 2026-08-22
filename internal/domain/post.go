@@ -17,16 +17,17 @@ type Post struct {
 	ID        int       `json:"id"`
 	OwnerID   int       `json:"ownerId"`
 	CreatedAt time.Time `json:"createdAt"`
-	Views     int       `json:"views"`
-	Reactions int       `json:"reactions"`
-	Reposts   int       `json:"reposts"`
 	Text      string    `json:"text"`
 
 	Photos []Photo `json:"photos"`
 	Videos []Video `json:"videos"`
 
 	Comments []Comment `json:"comments"`
+
+	Stats PostStats `json:"stats"`
 }
+
+// ATTACHMENTS
 
 type Comment struct {
 	ID        int       `json:"id"`
@@ -66,4 +67,12 @@ type Video struct {
 	// Summary string `json:"summary"`
 
 	Content []byte `json:"content"`
+}
+
+// STATS
+
+type PostStats struct {
+	Views     int `json:"views"`
+	Reactions int `json:"reactions"`
+	Reposts   int `json:"reposts"`
 }

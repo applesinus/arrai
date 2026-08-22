@@ -77,17 +77,24 @@ func (p vkWallPost) toDomain(logger slog.Logger) (domain.Post, error) {
 	creationTime := creationTimeOrDefault(p.CreatedAt)
 	photos, videos := parseAttachments(logger, p.Attachments, *p.ID)
 
+	stats := domain.PostStats{
+		Views:     p.Views.Count,
+		Reactions: p.Reactions.Count,
+		Reposts:   p.Reposts.Count,
+	}
+
 	post := domain.Post{
 		ID:        *p.ID,
 		OwnerID:   *p.OwnerID,
 		CreatedAt: creationTime,
-		Views:     p.Views.Count,
-		Reactions: p.Reactions.Count,
-		Reposts:   p.Reposts.Count,
 		Text:      *p.Text,
-		Photos:    photos,
-		Videos:    videos,
-		Comments:  nil,
+
+		Photos: photos,
+		Videos: videos,
+
+		Comments: nil,
+
+		Stats: stats,
 	}
 
 	return post, nil
