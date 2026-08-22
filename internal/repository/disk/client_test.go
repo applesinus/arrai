@@ -171,6 +171,181 @@ var (
 			Reposts:   reposts + 1,
 		},
 	}
+	postWithTextOnly = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments:  []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithOnePhoto = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos: []domain.Photo{
+			photo1,
+		},
+		Videos:   []domain.Video{},
+		Comments: []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithManyPhotos = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos: []domain.Photo{
+			photo1,
+			photo2,
+		},
+		Videos:   []domain.Video{},
+		Comments: []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithOneVideo = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos: []domain.Video{
+			video1,
+		},
+		Comments: []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithManyVideos = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos: []domain.Video{
+			video1,
+			video2,
+		},
+		Comments: []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithOneComment = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments: []domain.Comment{
+			comment1,
+		},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithManyComments = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments: []domain.Comment{
+			comment1,
+			comment2,
+		},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithOneEveryAttachmentInComment = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments: []domain.Comment{
+			commentWithOneEveryAttachment,
+		},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithManyEveryAttachmentInComment = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments: []domain.Comment{
+			commentWithManyEveryAttachment,
+		},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	postWithCommentsThread = domain.Post{
+		ID:        postID,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments: []domain.Comment{
+			commentsThread,
+		},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
+	noPostID = domain.Post{
+		ID:        -1,
+		OwnerID:   ownerID,
+		CreatedAt: creationTime,
+		Text:      text,
+		Photos:    []domain.Photo{},
+		Videos:    []domain.Video{},
+		Comments:  []domain.Comment{},
+		Stats: domain.PostStats{
+			Views:     views,
+			Reactions: reactions,
+			Reposts:   reposts,
+		},
+	}
 )
 
 // updateStatus type
@@ -374,19 +549,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments:  []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithTextOnly,
 
 			expextedErr: nil,
 		},
@@ -394,22 +557,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos: []domain.Photo{
-					photo1,
-				},
-				Videos:   []domain.Video{},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithOnePhoto,
 
 			expextedErr: nil,
 		},
@@ -417,22 +565,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos: []domain.Video{
-					video1,
-				},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithOneVideo,
 
 			expextedErr: nil,
 		},
@@ -440,23 +573,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos: []domain.Photo{
-					photo1,
-					photo2,
-				},
-				Videos:   []domain.Video{},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithManyPhotos,
 
 			expextedErr: nil,
 		},
@@ -464,23 +581,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos: []domain.Video{
-					video1,
-					video2,
-				},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithManyVideos,
 
 			expextedErr: nil,
 		},
@@ -488,22 +589,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					comment1,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithOneComment,
 
 			expextedErr: nil,
 		},
@@ -511,23 +597,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					comment1,
-					comment2,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithManyComments,
 
 			expextedErr: nil,
 		},
@@ -535,22 +605,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentWithOneEveryAttachment,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithOneEveryAttachmentInComment,
 
 			expextedErr: nil,
 		},
@@ -558,22 +613,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentWithManyEveryAttachment,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithManyEveryAttachmentInComment,
 
 			expextedErr: nil,
 		},
@@ -581,22 +621,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentsThread,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &postWithCommentsThread,
 
 			expextedErr: nil,
 		},
@@ -606,20 +631,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        -1,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments:  []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: &noPostID,
 
 			expextedErr: domain.ERROR_NO_POST_ID,
 		},
@@ -786,20 +798,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments:  []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithTextOnly,
 
 			expextedErr: nil,
 		},
@@ -807,22 +806,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos: []domain.Photo{
-					photo1,
-				},
-				Videos:   []domain.Video{},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithOnePhoto,
 
 			expextedErr: nil,
 		},
@@ -830,22 +814,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos: []domain.Video{
-					video1,
-				},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithOneVideo,
 
 			expextedErr: nil,
 		},
@@ -853,23 +822,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos: []domain.Photo{
-					photo1,
-					photo2,
-				},
-				Videos:   []domain.Video{},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithManyPhotos,
 
 			expextedErr: nil,
 		},
@@ -877,23 +830,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos: []domain.Video{
-					video1,
-					video2,
-				},
-				Comments: []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithManyVideos,
 
 			expextedErr: nil,
 		},
@@ -901,22 +838,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					comment1,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithOneComment,
 
 			expextedErr: nil,
 		},
@@ -924,23 +846,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					comment1,
-					comment2,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithManyComments,
 
 			expextedErr: nil,
 		},
@@ -948,22 +854,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentWithOneEveryAttachment,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithOneEveryAttachmentInComment,
 
 			expextedErr: nil,
 		},
@@ -971,22 +862,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentWithManyEveryAttachment,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithManyEveryAttachmentInComment,
 
 			expextedErr: nil,
 		},
@@ -994,22 +870,7 @@ func TestClient_GetPost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments: []domain.Comment{
-					commentsThread,
-				},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post: postWithCommentsThread,
 
 			expextedErr: nil,
 		},
@@ -1861,20 +1722,7 @@ func TestClient_DeletePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &domain.Post{
-				ID:        postID,
-				OwnerID:   ownerID,
-				CreatedAt: creationTime,
-				Text:      text,
-				Photos:    []domain.Photo{},
-				Videos:    []domain.Video{},
-				Comments:  []domain.Comment{},
-				Stats: domain.PostStats{
-					Views:     views,
-					Reactions: reactions,
-					Reposts:   reposts,
-				},
-			},
+			post:     &postWithTextOnly,
 			deleteID: postID,
 
 			expextedErr: nil,
