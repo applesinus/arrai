@@ -283,8 +283,9 @@ func saveAttachments[T haveAttachments](repoClient *Client, dirPath string, enti
 				(*photos)[j].Original.Filename = photoFilename
 				(*photos)[j].Preview.Filename = previewFilename
 
-				//(*photos)[j].Self.Content = []byte{}
-				//(*photos)[j].Preview.Content = []byte{}
+				// updating the original struct to contain empty content
+				(*photos)[j].Original.Content = []byte{}
+				(*photos)[j].Preview.Content = []byte{}
 			}
 		}
 
@@ -309,8 +310,9 @@ func saveAttachments[T haveAttachments](repoClient *Client, dirPath string, enti
 				(*videos)[j].Filename = videoFilename
 				(*videos)[j].Preview.Filename = previewFilename
 
-				//(*videos)[j].Content = []byte{}
-				//(*videos)[j].Preview.Content = []byte{}
+				// updating the original struct to contain empty content
+				(*videos)[j].Content = []byte{}
+				(*videos)[j].Preview.Content = []byte{}
 			}
 		}
 
