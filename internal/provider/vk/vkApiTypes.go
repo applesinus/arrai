@@ -144,6 +144,32 @@ func (c vkComment) toDomain(logger slog.Logger, wallAuthorID int) (domain.Commen
 	}, nil
 }
 
+type vkPostStats struct {
+	ReachTotal       int `json:"reach_total"`
+	ReachSubscribers int `json:"reach_subscribers"`
+	ToGroup          int `json:"to_group"`
+	JoinGroup        int `json:"join_group"`
+	Unsubscribe      int `json:"unsubscribe"`
+	Hide             int `json:"hide"`
+}
+
+// Takes previously parsed stats from vkPost. Returns new domain.PostStats struct.
+func (c vkPostStats) toDomain(stats domain.PostStats) domain.PostStats {
+	return domain.PostStats{
+		ReachTotal:       c.ReachTotal,
+		ReachSubscribers: c.ReachSubscribers,
+		Views:            stats.Views,
+
+		Reactions: stats.Reactions,
+		Reposts:   stats.Reposts,
+
+		WentToAccount: c.ToGroup,
+		Subscribed:    c.JoinGroup,
+		Unsubscribed:  c.Unsubscribe,
+		HideInFeed:    c.Hide,
+	}
+}
+
 // SUPPORT FUNCTIONS
 
 func creationTimeOrDefault(creationTime *int) time.Time {

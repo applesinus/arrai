@@ -160,53 +160,88 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 		)
 	}
 
-	// Getting comments and attachments for all posts
+	// Enriching posts
 	for i := range posts {
-		comments, err := c.getComments(ctx, authorId, posts[i].ID)
-		if err != nil {
+		// Getting comments
+		comments, errComments := c.getComments(ctx, authorId, posts[i].ID)
+		if errComments != nil {
 			c.logger.Error("failed to get comments for post",
 				"post_id", posts[i].ID,
-				"error", err,
+				"error", errComments,
 			)
-			if err == context.Canceled {
+			if errComments == context.Canceled {
 				break
 			}
 			continue
 		}
 		posts[i].Comments = *comments
 
-		err = c.fillPhotos(ctx, &posts[i].Photos)
-		if err != nil {
-			if err == context.Canceled {
+		if comments != nil {
+			c.logger.Debug("Got post's comments",
+				"post_id", posts[i].ID,
+				"total", len(*comments),
+				"has_error", errComments != nil,
+			)
+		}
+
+		// Getting photos
+		errPhotos := c.fillPhotos(ctx, &posts[i].Photos)
+		if errPhotos != nil {
+			if errPhotos == context.Canceled {
 				break
 			}
 			c.logger.Error("failed to get photos for post",
 				"post_id", posts[i].ID,
-				"error", err,
+				"error", errPhotos,
 			)
 			continue
 		}
 
-		err = c.fillVideos(ctx, &posts[i].Videos)
-		if err != nil {
-			if err == context.Canceled {
+		c.logger.Debug("Got post's photos",
+			"post_id", posts[i].ID,
+			"total", len(posts[i].Photos),
+			"has_error", errPhotos != nil,
+		)
+
+		// Getting videos
+		errVideos := c.fillVideos(ctx, &posts[i].Videos)
+		if errVideos != nil {
+			if errVideos == context.Canceled {
 				break
 			}
 			c.logger.Error("failed to get videos for post",
 				"post_id", posts[i].ID,
-				"error", err,
+				"error", errVideos,
 			)
 			continue
 		}
 
-		if c.debugMode {
-			break
+		c.logger.Debug("Got post's videos",
+			"post_id", posts[i].ID,
+			"total", len(posts[i].Videos),
+			"has_error", errVideos != nil,
+		)
+
+		// Getting stats
+		errStats := c.fillStats(ctx, &posts[i])
+		if errStats != nil {
+			if errStats == context.Canceled {
+				break
+			}
+			c.logger.Error("failed to get stats for post",
+				"post_id", posts[i].ID,
+				"error", errStats,
+			)
+			continue
 		}
 
-		if len(*comments) != 0 {
-			c.logger.Info("Got post's comments and photos",
-				"total", i,
-			)
+		c.logger.Debug("Got post's stats",
+			"post_id", posts[i].ID,
+			"has_error", errStats != nil,
+		)
+
+		if c.debugMode {
+			break
 		}
 	}
 
@@ -387,6 +422,30 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 	}
 
 	return &comments, nil
+}
+
+func (c *Client) fillStats(ctx context.Context, post *domain.Post) error {
+	resp, err := c.doVkApiRequest(ctx, METHOD_GET_POST_STATS, map[string]any{
+		"owner_id": post.OwnerID,
+		"post_ids": post.ID,
+	})
+	if err != nil {
+		return err
+	}
+
+	response := vkGetPostStatsResponse{}
+	err = json.Unmarshal(resp, &response)
+	if err != nil {
+		return err
+	}
+
+	if len(response.Response) == 0 {
+		return nil
+	}
+
+	post.Stats = response.Response[0].toDomain(post.Stats)
+
+	return nil
 }
 
 // fillReplies implements DFS

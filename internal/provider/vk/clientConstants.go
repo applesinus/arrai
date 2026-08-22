@@ -6,9 +6,10 @@ const (
 	// based on VK API 5.199
 	VK_API_VERSION = "5.199"
 
-	METHOD_GET_WALL     = "wall.get"
-	METHOD_GET_COMMENTS = "wall.getComments"
-	METHOD_RESOLVE_NAME = "utils.resolveScreenName"
+	METHOD_RESOLVE_NAME   = "utils.resolveScreenName"
+	METHOD_GET_WALL       = "wall.get"
+	METHOD_GET_COMMENTS   = "wall.getComments"
+	METHOD_GET_POST_STATS = "stats.getPostReach"
 
 	ATTACHMENT_PHOTO        = "photo"
 	ATTACHMENT_PHOTO_OLD    = "posted_photo"

@@ -72,7 +72,15 @@ type Video struct {
 // STATS
 
 type PostStats struct {
-	Views     int `json:"views"`
+	ReachTotal       int `json:"reachTotal"`
+	ReachSubscribers int `json:"reachSubscribers"`
+	Views            int `json:"views"`
+
 	Reactions int `json:"reactions"`
 	Reposts   int `json:"reposts"`
+
+	WentToAccount int `json:"wentToAccount"`
+	Subscribed    int `json:"subscribed"`
+	Unsubscribed  int `json:"unsubscribed"`
+	HideInFeed    int `json:"hideInFeed"`
 }

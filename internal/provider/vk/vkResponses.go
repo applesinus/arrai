@@ -17,3 +17,7 @@ type vkGetCommentsResponse struct {
 		Items []vkComment `json:"items"`
 	} `json:"response"`
 }
+
+type vkGetPostStatsResponse struct {
+	Response []vkPostStats `json:"response"`
+}
