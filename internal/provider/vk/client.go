@@ -435,6 +435,8 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 	return &comments, nil
 }
 
+// TODO
+// Currently not working via APP token, need to implement VK ID SDK
 func (c *Client) fillStats(ctx context.Context, post *domain.Post) error {
 	post.Stats = EmptyPostStats.toDomain(post.Stats)
 
