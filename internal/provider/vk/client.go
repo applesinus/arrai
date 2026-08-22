@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -98,6 +99,9 @@ func (c *Client) getAuthorIntID(ctx context.Context, authorID string) (int, erro
 	if err != nil {
 		return 0, err
 	}
+	if response.Error.IsNotNull(ctx, c.logger) {
+		return 0, errors.New(response.Error.Message)
+	}
 	if response.Response.ID == 0 {
 		return 0, fmt.Errorf("failed to resolve author ID: %s", authorID)
 	}
@@ -132,6 +136,9 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 		err = json.Unmarshal(resp, &response)
 		if err != nil {
 			return nil, err
+		}
+		if response.Error.IsNotNull(ctx, c.logger) {
+			return nil, errors.New(response.Error.Message)
 		}
 
 		if len(response.Response.Items) == 0 {
@@ -231,6 +238,7 @@ func (c *Client) GetPosts(ctx context.Context, authorID string) (*[]domain.Post,
 			c.logger.Error("failed to get stats for post",
 				"post_id", posts[i].ID,
 				"error", errStats,
+				"hint", fmt.Sprintf("consider checking method constraints on https://vk.com/dev/%s", METHOD_GET_POST_STATS),
 			)
 			continue
 		}
@@ -380,6 +388,9 @@ func (c *Client) getComments(ctx context.Context, authorID, postID int) (*[]doma
 		if err != nil {
 			return nil, err
 		}
+		if response.Error.IsNotNull(ctx, c.logger) {
+			return nil, errors.New(response.Error.Message)
+		}
 		if len(response.Response.Items) == 0 {
 			break
 		}
@@ -438,9 +449,17 @@ func (c *Client) fillStats(ctx context.Context, post *domain.Post) error {
 	if err != nil {
 		return err
 	}
-
-	if len(response.Response) == 0 {
-		return nil
+	if response.Error.IsNotNull(ctx, c.logger) {
+		return errors.New(response.Error.Message)
+	}
+	if len(response.Response) == 0 ||
+		(response.Response[0].Hide == 0 &&
+			response.Response[0].JoinGroup == 0 &&
+			response.Response[0].ReachSubscribers == 0 &&
+			response.Response[0].ReachTotal == 0 &&
+			response.Response[0].ToGroup == 0 &&
+			response.Response[0].Unsubscribe == 0) {
+		return ERROR_NO_STATS
 	}
 
 	post.Stats = response.Response[0].toDomain(post.Stats)
@@ -468,6 +487,9 @@ func (c *Client) fillReplies(ctx context.Context, authorID, postID int, comment 
 		err = json.Unmarshal(resp, &response)
 		if err != nil {
 			return err
+		}
+		if response.Error.IsNotNull(ctx, c.logger) {
+			return errors.New(response.Error.Message)
 		}
 		if len(response.Response.Items) == 0 {
 			break

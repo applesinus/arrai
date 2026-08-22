@@ -1,5 +1,7 @@
 package vk
 
+import "errors"
+
 const (
 	BASE_URL = "https://api.vk.com/method/"
 
@@ -9,7 +11,7 @@ const (
 	METHOD_RESOLVE_NAME   = "utils.resolveScreenName"
 	METHOD_GET_WALL       = "wall.get"
 	METHOD_GET_COMMENTS   = "wall.getComments"
-	METHOD_GET_POST_STATS = "stats.getPostReach"
+	METHOD_GET_POST_STATS = "getPostReach"
 
 	ATTACHMENT_PHOTO        = "photo"
 	ATTACHMENT_PHOTO_OLD    = "posted_photo"
@@ -29,4 +31,8 @@ const (
 	ATTACHMENT_STICKER      = "sticker"
 	ATTACHMENT_PRETTY_CARDS = "pretty_cards"
 	ATTACHMENT_EVENT        = "event"
+)
+
+var (
+	ERROR_NO_STATS = errors.New("no stats got via api")
 )
