@@ -39,45 +39,52 @@ const (
 )
 
 var (
-	postID       = 1
-	ownerID      = 2
-	creationTime = time.Now().Truncate(0)
-	views        = 3
-	reactions    = 4
-	reposts      = 5
-	text         = "text"
-	photo1       = createMockPhoto("1")
-	photo2       = createMockPhoto("2")
-	video1       = createMockVideo("3")
-	video2       = createMockVideo("4")
-	comment1     = domain.Comment{
-		ID:        6,
+	postID           = 1
+	ownerID          = 2
+	creationTime     = time.Now().Truncate(0)
+	text             = "text"
+	reachTotal       = 3
+	reachSubscribers = 4
+	views            = 5
+	reactions        = 6
+	reposts          = 7
+	wentToAccount    = 8
+	subscribed       = 9
+	unsubscribed     = 10
+	hideInFeed       = 11
+	photo1           = createMockPhoto("12")
+	photo2           = createMockPhoto("13")
+	video1           = createMockVideo("14")
+	video2           = createMockVideo("15")
+	user             = "user"
+	comment1         = domain.Comment{
+		ID:        100,
 		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
+		User:      user,
 		IsAuthor:  true,
-		Reactions: 7,
+		Reactions: 0,
 		Text:      "text",
 		Photos:    []domain.Photo{},
 		Videos:    []domain.Video{},
 		Replies:   []domain.Comment{},
 	}
 	comment2 = domain.Comment{
-		ID:        8,
+		ID:        101,
 		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 9,
+		User:      user,
+		IsAuthor:  false,
+		Reactions: 10,
 		Text:      "text",
 		Photos:    []domain.Photo{},
 		Videos:    []domain.Video{},
 		Replies:   []domain.Comment{},
 	}
 	commentWithOneEveryAttachment = domain.Comment{
-		ID:        10,
+		ID:        102,
 		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
+		User:      user,
 		IsAuthor:  true,
-		Reactions: 11,
+		Reactions: 20,
 		Text:      "text",
 		Photos: []domain.Photo{
 			photo1,
@@ -88,11 +95,11 @@ var (
 		Replies: []domain.Comment{},
 	}
 	commentWithManyEveryAttachment = domain.Comment{
-		ID:        12,
+		ID:        103,
 		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
-		IsAuthor:  true,
-		Reactions: 13,
+		User:      user,
+		IsAuthor:  false,
+		Reactions: 30,
 		Text:      "text",
 		Photos: []domain.Photo{
 			photo1,
@@ -105,15 +112,41 @@ var (
 		Replies: []domain.Comment{},
 	}
 	commentsThread = domain.Comment{
-		ID:        14,
+		ID:        104,
 		CreatedAt: time.Now().Truncate(0),
-		User:      "user",
+		User:      user,
 		IsAuthor:  true,
-		Reactions: 15,
+		Reactions: 40,
 		Text:      "text",
 		Photos:    []domain.Photo{},
 		Videos:    []domain.Video{},
 		Replies:   []domain.Comment{comment1, commentWithManyEveryAttachment},
+	}
+	stats1 = domain.PostStats{
+		ReachTotal:       reachTotal,
+		ReachSubscribers: reachSubscribers,
+		Views:            views,
+
+		Reactions: reactions,
+		Reposts:   reposts,
+
+		WentToAccount: wentToAccount,
+		Subscribed:    subscribed,
+		Unsubscribed:  unsubscribed,
+		HideInFeed:    hideInFeed,
+	}
+	stats2 = domain.PostStats{
+		ReachTotal:       reachTotal + 1,
+		ReachSubscribers: reachSubscribers + 1,
+		Views:            views + 1,
+
+		Reactions: reactions + 1,
+		Reposts:   reposts + 1,
+
+		WentToAccount: wentToAccount + 1,
+		Subscribed:    subscribed + 1,
+		Unsubscribed:  unsubscribed + 1,
+		HideInFeed:    hideInFeed + 1,
 	}
 	post1 = domain.Post{
 		ID:        postID,
@@ -123,11 +156,7 @@ var (
 		Photos:    []domain.Photo{photo1},
 		Videos:    []domain.Video{video1},
 		Comments:  []domain.Comment{comment1},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:     stats1,
 	}
 	post1Changed = domain.Post{
 		ID:        postID,
@@ -137,11 +166,7 @@ var (
 		Photos:    []domain.Photo{photo1},
 		Videos:    []domain.Video{video1},
 		Comments:  []domain.Comment{comment1},
-		Stats: domain.PostStats{
-			Views:     views + 1,
-			Reactions: reactions + 1,
-			Reposts:   reposts + 1,
-		},
+		Stats:     stats2,
 	}
 	post2 = domain.Post{
 		ID:        postID + 1,
@@ -151,11 +176,7 @@ var (
 		Photos:    []domain.Photo{photo2},
 		Videos:    []domain.Video{video2},
 		Comments:  []domain.Comment{comment2},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:     stats1,
 	}
 	post2Changed = domain.Post{
 		ID:        postID + 1,
@@ -165,11 +186,7 @@ var (
 		Photos:    []domain.Photo{photo2},
 		Videos:    []domain.Video{video2},
 		Comments:  []domain.Comment{comment2},
-		Stats: domain.PostStats{
-			Views:     views + 1,
-			Reactions: reactions + 1,
-			Reposts:   reposts + 1,
-		},
+		Stats:     stats2,
 	}
 	postWithTextOnly = domain.Post{
 		ID:        postID,
@@ -179,11 +196,7 @@ var (
 		Photos:    []domain.Photo{},
 		Videos:    []domain.Video{},
 		Comments:  []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:     stats1,
 	}
 	postWithOnePhoto = domain.Post{
 		ID:        postID,
@@ -195,11 +208,7 @@ var (
 		},
 		Videos:   []domain.Video{},
 		Comments: []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:    stats1,
 	}
 	postWithManyPhotos = domain.Post{
 		ID:        postID,
@@ -212,11 +221,7 @@ var (
 		},
 		Videos:   []domain.Video{},
 		Comments: []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:    stats1,
 	}
 	postWithOneVideo = domain.Post{
 		ID:        postID,
@@ -228,11 +233,7 @@ var (
 			video1,
 		},
 		Comments: []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:    stats1,
 	}
 	postWithManyVideos = domain.Post{
 		ID:        postID,
@@ -245,11 +246,7 @@ var (
 			video2,
 		},
 		Comments: []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:    stats1,
 	}
 	postWithOneComment = domain.Post{
 		ID:        postID,
@@ -261,11 +258,7 @@ var (
 		Comments: []domain.Comment{
 			comment1,
 		},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats: stats1,
 	}
 	postWithManyComments = domain.Post{
 		ID:        postID,
@@ -278,11 +271,7 @@ var (
 			comment1,
 			comment2,
 		},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats: stats1,
 	}
 	postWithOneEveryAttachmentInComment = domain.Post{
 		ID:        postID,
@@ -294,11 +283,7 @@ var (
 		Comments: []domain.Comment{
 			commentWithOneEveryAttachment,
 		},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats: stats1,
 	}
 	postWithManyEveryAttachmentInComment = domain.Post{
 		ID:        postID,
@@ -310,11 +295,7 @@ var (
 		Comments: []domain.Comment{
 			commentWithManyEveryAttachment,
 		},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats: stats1,
 	}
 	postWithCommentsThread = domain.Post{
 		ID:        postID,
@@ -326,13 +307,9 @@ var (
 		Comments: []domain.Comment{
 			commentsThread,
 		},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats: stats1,
 	}
-	noPostID = domain.Post{
+	postWithNoPostID = domain.Post{
 		ID:        -1,
 		OwnerID:   ownerID,
 		CreatedAt: creationTime,
@@ -340,11 +317,7 @@ var (
 		Photos:    []domain.Photo{},
 		Videos:    []domain.Video{},
 		Comments:  []domain.Comment{},
-		Stats: domain.PostStats{
-			Views:     views,
-			Reactions: reactions,
-			Reposts:   reposts,
-		},
+		Stats:     domain.PostStats{},
 	}
 )
 
@@ -631,7 +604,7 @@ func TestClient_SavePost(t *testing.T) {
 			setupFunc:    func() {},
 			teardownFunc: func() {},
 
-			post: &noPostID,
+			post: &postWithNoPostID,
 
 			expextedErr: domain.ERROR_NO_POST_ID,
 		},
